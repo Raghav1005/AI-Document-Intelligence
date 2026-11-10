@@ -142,7 +142,7 @@ export default function HomePage() {
             )}
           </div>
           <p className={styles.localNote}>
-            Authentication is handled by your local Keycloak service. Credentials are never entered in this app.
+            Sign-in uses your local Keycloak service. Registration uses a four-digit email code.
           </p>
         </section>
       </main>

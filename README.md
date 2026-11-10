@@ -4,7 +4,7 @@ A locally hosted document processing and retrieval-augmented chat platform. The 
 
 ## Current status
 
-The repository contains the infrastructure foundation, a protected Next.js workspace shell, Keycloak browser authentication with PKCE S256, email-verification enforcement in the frontend and API, reproducible local SMTP settings, and unit tests. Numeric OTP, application persistence, document processing, and chat remain planned feature work.
+The repository contains the infrastructure foundation, a protected Next.js workspace shell, Keycloak browser authentication with PKCE S256, custom four-digit email OTP registration, backend email-verification enforcement, and local SMTP capture. Application persistence, document processing, and chat remain planned feature work.
 
 ## Prerequisites
 
@@ -33,7 +33,7 @@ The initial model settings are placeholders for later backend integration. Hardw
 
 The app and vector databases do not publish host ports and share only the API data network with FastAPI and Ollama. The frontend shares the API proxy and identity-service networks, not the database network. Keycloak's database uses an isolated internal network; Keycloak and Mailpit share a separate SMTP network. Keycloak uses development configuration; do not expose this stack publicly.
 
-New registrations must verify their email before accessing the workspace. Keycloak sends local verification messages to Mailpit; inspect them at [http://localhost:8025](http://localhost:8025). This inbox captures development mail and does not deliver messages externally. Realm import settings and an idempotent `keycloak-config` startup job enable registration, make verification a default required action, and configure Mailpit for both new and existing Keycloak databases.
+New users register through the custom Local AI form and enter a four-digit email code before a Keycloak account is created. Keycloak's public registration form is disabled. OTP email is sent through the backend to local Mailpit; inspect messages at [http://localhost:8025](http://localhost:8025). Mailpit captures development mail and does not deliver messages externally. A realm import and the `keycloak-config` startup job configure a confidential backend registration client and SMTP for new or existing Keycloak databases.
 
 After the Ollama service is available, model downloads are explicit:
 
@@ -48,7 +48,7 @@ The model weights are stored in the `ollama-data` volume. Downloads need network
 
 ## Persistent data
 
-Named volumes retain application database data, vector data, Keycloak data, and Ollama model files. `docker compose down` stops and removes containers but keeps these volumes. Removing volumes destroys local data and model downloads.
+Named volumes retain application database data, vector data, Keycloak data, registration encryption keys and client credentials, and Ollama model files. `docker compose down` stops and removes containers but keeps these volumes. Removing volumes destroys local data, registration secrets, and model downloads. Back up the `registration-secrets` volume together with the application database; its key encrypts pending registration passwords.
 
 ## Current services
 
@@ -72,6 +72,8 @@ From the repository root, validate the Compose file with `docker compose --env-f
 
 - The frontend uses the public Keycloak OIDC client with Authorization Code Flow and PKCE S256. Access/refresh tokens stay in memory and are not written to local or session storage.
 - FastAPI validates JWT signature, issuer, expiration, and authorized client (`azp`) independently using Keycloak JWKS, and requires the signed `email_verified` claim to be true for protected routes. Health endpoints remain public. An optional audience check is available when a Keycloak audience mapper is configured.
+- Pending OTP records live in the app PostgreSQL database. Four-digit codes are HMAC-hashed; pending passwords use AES-GCM encryption with a key stored in the private `registration-secrets` volume. Verification, resend, and rate-limit state persist across backend restarts.
+- The backend provisions users through the confidential `local-ai-registration` service account. It receives only Keycloak `manage-users` and `query-users` client roles; no client secret or administrative credential is sent to browser code.
 - Application and vector data are separate from Keycloak identity data.
 - Local inference will not send documents or conversations to external AI APIs.
 - Numeric email OTP may require a custom Keycloak extension; the default verification-link flow is not equivalent to a code-based OTP.

@@ -1,6 +1,7 @@
 "use client";
 
 import type Keycloak from "keycloak-js";
+import { useRouter } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -250,6 +251,7 @@ export function AuthProvider({
   realm,
   clientId,
 }: AuthProviderProps) {
+  const router = useRouter();
   const [snapshot, setSnapshot] = useState<AuthSnapshot>(currentSnapshot);
   const config = useMemo(() => ({ url, realm, clientId }), [url, realm, clientId]);
 
@@ -266,10 +268,8 @@ export function AuthProvider({
   }, [config]);
 
   const register = useCallback(async () => {
-    await initializeKeycloak(config);
-    if (!keycloakInstance) throw new Error("Keycloak is not initialized.");
-    await keycloakInstance.register({ redirectUri: window.location.origin });
-  }, [config]);
+    router.push("/register");
+  }, [router]);
 
   const logout = useCallback(async () => {
     if (!keycloakInstance) throw new Error("Keycloak is not initialized.");

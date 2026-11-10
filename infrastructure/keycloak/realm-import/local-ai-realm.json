@@ -1,7 +1,8 @@
 {
   "realm": "local-ai",
   "enabled": true,
-  "registrationAllowed": true,
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
   "verifyEmail": true,
   "requiredActions": [
     {
@@ -39,6 +40,28 @@
       "attributes": {
         "pkce.code.challenge.method": "S256"
       }
+    },
+    {
+      "clientId": "local-ai-registration",
+      "name": "Local AI Registration API",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+        "serviceAccountsEnabled": true,
+        "defaultClientScopes": [
+          "web-origins",
+          "service_account",
+          "acr",
+          "profile",
+          "roles",
+          "basic",
+          "email",
+          "kc-admin-api"
+        ]
     }
   ]
 }
