@@ -33,4 +33,32 @@
 .composer { display: flex; align-items: center; justify-content: space-between; min-height: 51px; margin-top: 34px; padding: 7px 8px 7px 16px; border: 1px solid #e2e5df; border-radius: 12px; background: #fff; color: #a0a7a1; font-size: 11px; }
 .composer button { width: 32px; height: 32px; border: 0; border-radius: 9px; background: #e4e9e3; color: #88938b; font-size: 18px; }
 .caption { margin: 11px 0 0; color: #a1a8a2; font-size: 9px; text-align: center; }
+.topbarRight { display: flex; align-items: center; gap: 18px; }
+.userLabel { color: #59665d; font-size: 10px; }
+.username { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logoutButton { width: 27px; height: 27px; border: 1px solid #d9ddd7; border-radius: 8px; background: #fafbf9; color: #53665a; cursor: pointer; }
+.logoutButton:disabled { opacity: .55; cursor: wait; }
+.authStage { display: grid; min-height: 100vh; place-items: center; padding: 28px; background: radial-gradient(ellipse at 50% 40%, #f3f5ef 0%, #f8f8f6 67%); }
+.loginCard, .loadingCard { width: min(100%, 430px); padding: 35px 36px 29px; border: 1px solid #e5e8e2; border-radius: 16px; background: rgba(255,255,255,.94); box-shadow: 0 18px 55px rgba(35,54,43,.07); }
+.loginCard .brand, .loadingCard .brand { padding: 0; }
+.loginAccent { display: grid; width: 43px; height: 43px; place-items: center; margin: 43px 0 20px; border: 1px solid #dae7db; border-radius: 13px; background: #eff4ee; color: #466c56; font-size: 20px; }
+.loginCard .eyebrow { margin-bottom: 11px; }
+.loginCard h1, .loadingCard h1 { margin: 0; color: #1f3029; font-family: Georgia, 'Times New Roman', serif; font-size: 36px; font-weight: 400; letter-spacing: -1.1px; }
+.loginIntro, .loadingCard p { margin: 11px 0 23px; color: #778079; font-size: 12px; line-height: 1.7; }
+.authActions { display: grid; gap: 10px; }
+.primaryAuthButton, .secondaryAuthButton { min-height: 44px; border-radius: 9px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.primaryAuthButton { border: 1px solid #294d3e; background: #294d3e; color: #fff; }
+.secondaryAuthButton { border: 1px solid #dfe4de; background: #fff; color: #41584a; }
+.primaryAuthButton:disabled, .secondaryAuthButton:disabled, .textAuthButton:disabled { opacity: .58; cursor: wait; }
+.textAuthButton { justify-self: center; margin-top: 3px; border: 0; background: transparent; color: #52705d; font-size: 11px; cursor: pointer; }
+.authError { margin: 0 0 14px; padding: 11px 12px; border: 1px solid #efd5d1; border-radius: 8px; background: #fff7f5; color: #9a4338; font-size: 11px; line-height: 1.5; }
+.localNote { margin: 21px 0 0; color: #9aa19b; font-size: 10px; line-height: 1.6; text-align: center; }
+.loadingCard { display: flex; min-height: 270px; flex-direction: column; align-items: flex-start; justify-content: center; }
+.loadingCard .brand { margin-bottom: 43px; }
+.loadingCard h1 { font-size: 24px; letter-spacing: -.3px; }
+.loadingCard p { margin-bottom: 0; }
+.spinner { width: 22px; height: 22px; margin-bottom: 17px; border: 2px solid #dce6dd; border-top-color: #557c61; border-radius: 50%; animation: spin .8s linear infinite; }
+.inlineError { margin: 12px 0 0; color: #9a4338; font-size: 10px; text-align: center; }
+@keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 760px) { .sidebar { width: 66px; flex-basis: 66px; padding: 18px 10px; align-items: center; } .brand { padding: 0; } .brand > span:last-child, .newChat, .sidebarLabel, .navItem span, .sidebarBottom > span:not(.avatar) { display: none; } .navItem { padding: 11px; } .sidebarBottom { justify-content: center; width: 100%; } .topbar { padding: 0 18px; } .content { width: calc(100% - 36px); margin-top: 65px; } .cards { grid-template-columns: 1fr; } .card { min-height: 165px; } }
+@media (max-width: 480px) { .authStage { padding: 16px; } .loginCard, .loadingCard { padding: 27px 22px 22px; } .topbarRight { gap: 9px; } .userLabel { display: none; } }

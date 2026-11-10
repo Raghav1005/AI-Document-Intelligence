@@ -1,6 +1,6 @@
 # Project Interview Preparation
 
-**Status:** The answers distinguish the implemented foundation from planned product behavior. Do not present planned authentication, document processing, RAG, or chat behavior as implemented until those features land and their tests pass.
+**Status:** The answers distinguish implemented authentication from planned document processing, RAG, and chat. The live Keycloak/Docker flow has not been verified yet.
 
 ## 1. Architecture and design decisions
 
@@ -18,23 +18,23 @@
 
 ### Why Next.js instead of plain React?
 
-**Short answer:** Next.js provides the React UI plus a server runtime for the planned OIDC callback and BFF session boundary.
+**Short answer:** Next.js provides the required React App Router and standalone deployment target for this UI.
 
-**Detailed explanation:** Plain React with Vite could serve a client-only SPA but would need another server to keep tokens out of browser storage. SSR helps deliver initial HTML and creates server code for callbacks; it does not replace authorization or make local inference faster.
+**Detailed explanation:** Plain React with Vite could serve a client-only SPA with less server framework, but this project specifies Next.js and standalone output. SSR does not replace authorization or make local inference faster.
 
-**Project example:** The current `frontend/app/page.tsx` is an original workspace shell. BFF routes and API proxying are not implemented yet.
+**Project example:** `frontend/app/page.tsx` shows a Keycloak sign-in/registration view and gates the workspace on authenticated status.
 
-**Follow-ups:** What is the cost of a BFF hop? How will SSE pass through Next.js?
+**Follow-ups:** Which routes need client rendering? How will SSE be handled if it is later proxied through Next.js?
 
 ### How will React communicate with FastAPI?
 
-**Short answer:** The browser will call Next.js routes; the BFF will proxy REST and streaming requests to FastAPI using a server-held bearer token.
+**Short answer:** The browser calls FastAPI on `localhost:8000` with an in-memory Keycloak bearer token.
 
-**Detailed explanation:** The BFF mediates the browser session and API requests. FastAPI remains the authorization boundary and validates the token itself. This is the intended design, not implemented yet.
+**Detailed explanation:** The public OIDC client uses PKCE S256, keeps tokens in memory, and refreshes before expiry. FastAPI remains the authorization boundary and validates the token itself. The trade-off is that page JavaScript can access in-memory tokens.
 
-**Project example:** Compose configures the internal API URL as `http://backend:8000`.
+**Project example:** Compose publishes port 8000 to loopback and CORS allows the Next.js origin `http://localhost:3000`.
 
-**Follow-ups:** How will CSRF be mitigated? What headers and SSE events will be preserved?
+**Follow-ups:** How do you reduce XSS risk? How will SSE reconnect/cancel behavior be handled?
 
 ## 3. Docker and containerization
 
@@ -52,11 +52,11 @@
 
 ### How will FastAPI know a JWT is genuine?
 
-**Short answer:** It will verify the signature against Keycloak JWKS and validate issuer, audience, expiry, and role claims.
+**Short answer:** It verifies the RS256 signature against Keycloak JWKS and validates issuer, expiry, subject, and authorized client (`azp`). An optional audience claim can also be required.
 
 **Detailed explanation:** JWT payloads are encoded, not secret. Signature verification binds claims to Keycloak's signing key; issuer/audience limit token origin and intended service; expiry limits token lifetime. The backend must reject invalid tokens even if the frontend has checked them.
 
-**Project example:** The current API exposes health endpoints only; the validator is planned and does not exist yet.
+**Project example:** `backend/app/auth/keycloak.py` verifies access tokens; tests create signed RSA tokens and mock the JWKS key lookup.
 
 **Follow-ups:** What is JWKS key rotation? How should the API behave during Keycloak downtime?
 
@@ -66,7 +66,7 @@
 
 **Detailed explanation:** Self-hosting provides local control and avoids a managed identity dependency, but adds database, upgrade, realm, and extension operations. A managed provider can be better when the product accepts cloud identity and values reduced operations.
 
-**Project example:** Keycloak and its separate PostgreSQL service are present in Compose; realm configuration and login are not yet done.
+**Project example:** The configured realm/client are `local-ai` and `local-ai-frontend`; frontend integration exists, but live login still needs Docker verification.
 
 **Follow-ups:** What happens if Keycloak is unavailable? Why might numeric OTP need a custom extension?
 

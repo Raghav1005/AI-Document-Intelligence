@@ -1,6 +1,6 @@
 # Authentication Decision
 
-**Status: Accepted design; implementation pending.** Use self-hosted Keycloak for OIDC identity and a Next.js BFF session. FastAPI independently verifies access JWTs using Keycloak JWKS. The session and token flow is designed but not yet implemented.
+**Status: Frontend integration and backend JWT verification implemented; live Keycloak flow not yet runtime-verified.** Use self-hosted Keycloak as the OIDC provider and `keycloak-js` as a public browser client. FastAPI independently verifies access JWTs using Keycloak JWKS.
 
 ## Comparison
 
@@ -9,9 +9,9 @@
 - **Firebase Authentication:** convenient hosted identity and client SDK. Better for products already built around Firebase; less aligned with a self-hosted OIDC boundary and local-first operation.
 - **Custom JWT authentication:** maximum control but requires secure password storage, recovery, email verification, session rotation, key management, brute-force defenses, and ongoing security review. It duplicates mature identity-provider responsibilities.
 
-## Why Keycloak and BFF
+## Why Keycloak and a public client
 
-Keycloak supplies OAuth/OIDC, user lifecycle, roles, sessions, and password recovery. The BFF stores tokens server-side behind an HttpOnly cookie; FastAPI still validates the access JWT itself. This avoids browser local storage and ensures the API does not trust frontend validation.
+Keycloak supplies OAuth/OIDC, user lifecycle, roles, sessions, and password recovery. The browser client uses Authorization Code Flow with PKCE S256; the public client has no secret. `keycloak-js` keeps access and refresh tokens in memory, refreshes them before expiry, and does not persist them in localStorage or sessionStorage. FastAPI validates signatures and claims independently. This is simpler than a BFF for this local app, but JavaScript executing in the page can access the in-memory token, so XSS defenses remain important. A BFF is preferable if that exposure is unacceptable.
 
 ## Numeric OTP trade-off
 
@@ -19,8 +19,8 @@ Keycloak's usual email verification action is link based. A numeric OTP requirem
 
 ## Failure behavior and risks
 
-After a valid access token is issued, FastAPI can validate using cached JWKS until expiry/rotation policy requires Keycloak. Login, refresh, and logout depend on Keycloak. Key rotation and issuer/audience configuration errors can reject valid requests or, if validation is weakened, admit forged tokens. Use strict validation and tests.
+After a valid access token is issued, FastAPI verifies using cached JWKS; JWKS fetch uses the container-internal Keycloak URL while the token issuer is checked against the browser-visible issuer. Login, refresh, and logout depend on Keycloak. The API validates `iss`, `exp`, signature, and `azp` against `local-ai-frontend`; an optional audience can be required after an audience mapper is configured. Key rotation and issuer/client configuration errors can reject valid requests or, if validation is weakened, admit forged tokens.
 
 ## Revisit when
 
-Reconsider if self-hosting identity becomes too costly, the local-only requirement changes, or the numeric OTP requirement is relaxed. Implementation references: [docker-compose.yml](../../docker-compose.yml), [backend/app/main.py](../../backend/app/main.py), and the planned Next.js BFF.
+Reconsider if self-hosting identity becomes too costly, the local-only requirement changes, or browser-side tokens become unacceptable. Implementation references: [frontend/app/providers.tsx](../../frontend/app/providers.tsx), [backend/app/auth/keycloak.py](../../backend/app/auth/keycloak.py), and [backend/app/api/auth.py](../../backend/app/api/auth.py). Numeric email OTP remains separate and is not implemented here.

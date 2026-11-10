@@ -1,11 +1,11 @@
 # Frontend Framework Decision
 
-**Status: Accepted for the UI foundation.** The current code is a Next.js App Router scaffold with React, TypeScript, and CSS Modules/standard CSS; interactive authentication and chat behavior are not implemented yet.
+**Status: Accepted; authentication UI is implemented, live Keycloak flow pending runtime verification.** The code uses Next.js App Router with React, TypeScript, CSS Modules/standard CSS, and a client-side `keycloak-js` provider.
 
 ## Selected stack
 
 - **React** renders the component tree and manages interactive parts of the chat interface.
-- **Next.js App Router** supplies server rendering, routing, server-side code for the planned BFF, and a production server.
+- **Next.js App Router** supplies application routing, server-rendered shell, and the standalone production server.
 - **TypeScript** adds static checks for UI, API response, and session types.
 - **CSS Modules and standard CSS** keep styles scoped without Tailwind, as required.
 
@@ -15,7 +15,7 @@ The current scaffold is in [frontend/app](../../frontend/app), configured by [pa
 
 ### React alone
 
-Plain React with Vite is lighter and simpler for a client-only single-page app. It would require separate routing and a distinct BFF/server for secure server-side token storage. Since this application needs an OIDC callback and server-side session/token handling, Next.js provides a natural server boundary. If the application later becomes a desktop-only client with an independently hosted BFF, Vite could reduce framework overhead.
+Plain React with Vite is lighter and simpler for a client-only single-page app. It would require separately choosing a router and deployment server. Next.js is retained because the requested stack specifies it and its standalone output is already part of the deployment. Since the selected authentication client is browser-based, server-side token handling is not the reason for choosing Next.js.
 
 ### Vue
 
@@ -28,21 +28,21 @@ Angular includes a broad batteries-included application framework, DI, and estab
 ## Benefits
 
 - App Router combines routing and server-rendered pages with interactive React components.
-- The server runtime can handle the OIDC callback and keep tokens out of browser local storage.
+- App Router provides a maintainable page/layout structure for the protected workspace.
 - TypeScript supports shared, explicit data contracts.
 - CSS Modules satisfy the no-Tailwind constraint and scope component styles.
 
 ## Costs and limits
 
 - Next.js introduces server/client component boundaries and version-specific caching/runtime behavior.
-- The BFF adds a proxy hop and requires careful cookie, CSRF, and streaming behavior.
+- The current public-client flow keeps tokens in memory, where page JavaScript can access them; a BFF would reduce that exposure at the cost of server-side session and CSRF work.
 - SSR alone does not make a route private; server session checks and backend authorization are still required.
 - React and Next.js package updates need active maintenance.
 
 ## SSR trade-off
 
-Server rendering can send an initial HTML view before browser JavaScript has loaded and can make the OIDC callback/session boundary server-side. It does not make local inference faster, and this local authenticated app does not depend on public search indexing. Client-side rendering could be preferable for a static desktop shell; SSR is selected for the BFF and session boundary rather than SEO.
+Server rendering can send initial HTML before browser JavaScript has loaded. It does not make local inference faster, and this local authenticated app does not depend on public search indexing. Auth state is initialized in the browser by `keycloak-js`; server rendering must not assume that a browser token exists.
 
 ## Revisit when
 
-Reconsider the framework if the product becomes a packaged desktop application with a separate BFF, if server rendering causes resource or operational issues, or if team skills and deployment constraints change. The original requirements currently favor Next.js.
+Reconsider the framework if the product becomes a packaged desktop application, if server rendering causes resource or operational issues, or if team skills and deployment constraints change. The original requirements currently favor Next.js.

@@ -1,10 +1,10 @@
 # Local AI Document Intelligence & RAG Platform
 
-A locally hosted document processing and retrieval-augmented chat platform. The accepted architecture uses Next.js as a UI and backend-for-frontend, FastAPI for APIs and orchestration, Keycloak for OIDC identity, PostgreSQL and pgvector for persistence, and Ollama for local inference.
+A locally hosted document processing and retrieval-augmented chat platform. The application uses Next.js, FastAPI, Keycloak for OIDC identity, PostgreSQL and pgvector for persistence, and Ollama for local inference.
 
 ## Current status
 
-The repository contains the infrastructure foundation, a Next.js workspace shell, FastAPI process-health routes, and health-route tests. Authentication, OTP, persistence, document processing, and chat are planned feature work and are not yet implemented.
+The repository contains the infrastructure foundation, a protected Next.js workspace shell, Keycloak browser authentication, FastAPI JWT verification, and unit tests. Numeric OTP, application persistence, document processing, and chat remain planned feature work. The live Keycloak flow and Docker runtime still need end-to-end verification.
 
 ## Prerequisites
 
@@ -29,9 +29,9 @@ The initial model settings are placeholders for later backend integration. Hardw
    docker compose ps
    ```
 
-4. Open the workspace at [http://localhost:3000](http://localhost:3000), Keycloak at [http://localhost:8080](http://localhost:8080), Mailpit at [http://localhost:8025](http://localhost:8025), and the Ollama local API at [http://localhost:11434](http://localhost:11434). The API listens on port 8000 inside the Compose network and is intentionally not published to the host.
+4. Open the workspace at [http://localhost:3000](http://localhost:3000), Keycloak at [http://localhost:8080](http://localhost:8080), Mailpit at [http://localhost:8025](http://localhost:8025), FastAPI at [http://localhost:8000](http://localhost:8000), and the Ollama local API at [http://localhost:11434](http://localhost:11434).
 
-The app and vector databases do not publish host ports and share only the API data network with FastAPI and Ollama. The frontend shares only the API proxy and identity-service networks, not the database network. Keycloak's database uses an isolated internal network; Keycloak and Mailpit share a separate SMTP network. Keycloak uses development configuration; do not expose this stack publicly.
+The app and vector databases do not publish host ports and share only the API data network with FastAPI and Ollama. The frontend shares the API proxy and identity-service networks, not the database network. Keycloak's database uses an isolated internal network; Keycloak and Mailpit share a separate SMTP network. Keycloak uses development configuration; do not expose this stack publicly.
 
 After the Ollama service is available, model downloads are explicit:
 
@@ -58,17 +58,17 @@ Named volumes retain application database data, vector data, Keycloak data, and 
 | `keycloak` | OIDC identity service | `localhost:8080` |
 | `mailpit` | Development SMTP capture and inbox | `localhost:1025`, `localhost:8025` |
 | `ollama` | Local model runtime | `localhost:11434` |
-| `backend` | FastAPI health/API process | Internal network only |
-| `frontend` | Next.js workspace UI and planned BFF | `localhost:3000` |
+| `backend` | FastAPI health/API process | `localhost:8000` |
+| `frontend` | Next.js workspace UI and Keycloak public client | `localhost:3000` |
 
 ## Checks available at this stage
 
-From the repository root, validate the Compose file with `docker compose --env-file .env.example config --quiet`. Run the current backend health tests with `python -m pytest -p no:cacheprovider tests/` from `backend/`. These tests cover only process health routes; they do not verify database, Keycloak, Ollama, or end-to-end behavior.
+From the repository root, validate the Compose file with `docker compose --env-file .env.example config --quiet`. From `frontend/`, run `npm run typecheck`, `npm run lint`, and `npm run build`. From `backend/`, run `python -m pytest -p no:cacheprovider tests/`. Auth tests use a generated RSA key and do not contact a live Keycloak instance.
 
 ## Design notes
 
-- The browser will use a Next.js BFF with a secure HttpOnly session cookie. Access and refresh tokens remain server-side.
-- FastAPI will validate JWT signature, issuer, audience, expiration, and roles independently using Keycloak JWKS.
+- The frontend uses the public Keycloak OIDC client with Authorization Code Flow and PKCE S256. Access/refresh tokens stay in memory and are not written to local or session storage.
+- FastAPI validates JWT signature, issuer, expiration, and authorized client (`azp`) independently using Keycloak JWKS. An optional audience check is available when a Keycloak audience mapper is configured.
 - Application and vector data are separate from Keycloak identity data.
 - Local inference will not send documents or conversations to external AI APIs.
 - Numeric email OTP may require a custom Keycloak extension; the default verification-link flow is not equivalent to a code-based OTP.

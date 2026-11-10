@@ -8,6 +8,7 @@ node_modules/
 .next/
 out/
 coverage/
+*.tsbuildinfo
 npm-debug.log*
 
 # Python

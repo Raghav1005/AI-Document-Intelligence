@@ -8,43 +8,39 @@ Compose supplies DNS names such as `backend`, `keycloak`, and `app-db` on privat
 
 ```mermaid
 flowchart LR
-    Browser -->|localhost:3000| Next[Next.js]
-    Next -->|backend:8000| FastAPI
+    Browser -->|localhost:3000| Next[Next.js UI]
+    Browser -->|localhost:8000 + bearer| FastAPI
     FastAPI -->|api-data network| AppDB[(App PostgreSQL)]
     FastAPI --> VectorDB[(pgvector)]
     FastAPI --> Ollama
-    Next -->|OIDC, host-facing issuer| KC[Keycloak]
+    Browser -->|OIDC + PKCE S256| KC[Keycloak]
     KC --> KCDB[(Keycloak PostgreSQL)]
     KC --> Mailpit
 ```
 
-The frontend and backend product routes are not yet implemented. The compose file currently defines their service boundary and health probes.
+The Next.js frontend now initializes Keycloak in the browser. It calls FastAPI directly with an in-memory bearer token; Compose publishes FastAPI on localhost:8000 and allows CORS from localhost:3000.
 
 ## Request and authentication flow (planned)
 
-The selected design uses a Next.js backend-for-frontend (BFF), meaning the Next server handles the OIDC callback and holds OAuth tokens. A browser session cookie is Secure, HttpOnly, and SameSite-configured; browser JavaScript cannot read the access token. The BFF forwards an access token to FastAPI. FastAPI verifies the JWT signature using Keycloak's JWKS (public signing-key set), issuer, audience, expiration, and roles. It derives the owner identity from the verified `sub` claim.
+The frontend uses the Keycloak public client `local-ai-frontend`. Authorization Code Flow with PKCE S256 sends the user to Keycloak's hosted login/registration pages. The adapter keeps access and refresh tokens in JavaScript memory only and calls `updateToken` before expiry. Tokens are not written to localStorage or sessionStorage. The trade-off is that running JavaScript can access the token; XSS defenses matter. A backend-for-frontend (BFF) could hide tokens from browser JavaScript but would add server-side session and CSRF handling.
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant Browser
-    participant BFF as Next.js BFF
+    participant Browser as Browser / keycloak-js
     participant KC as Keycloak
     participant API as FastAPI
-    User->>Browser: Sign in
-    Browser->>BFF: Begin OIDC authorization with PKCE
-    BFF->>KC: Authorization request
-    KC-->>BFF: Authorization code via callback
-    BFF->>KC: Exchange code server-side
-    KC-->>BFF: Access and refresh tokens
-    BFF-->>Browser: HttpOnly session cookie
-    Browser->>BFF: Protected API request
-    BFF->>API: Authorization: Bearer access token
-    API->>KC: JWKS when refresh/cache requires it
-    API-->>BFF: User-scoped response
+    User->>Browser: Choose sign in or registration
+    Browser->>KC: Authorization Code Flow + PKCE S256
+    KC-->>Browser: Redirect with authorization code
+    Browser->>KC: Exchange code using PKCE verifier
+    KC-->>Browser: Access and refresh tokens (memory only)
+    Browser->>API: Bearer access token
+    API->>KC: Fetch/cache signing keys from internal JWKS URL
+    API-->>Browser: Identity from verified claims
 ```
 
-The current health API has no protected routes. Keycloak is running as a service, but realm/client configuration, BFF login, OTP, token refresh, logout, and JWT verification are not yet implemented.
+The client provider, login/registration/logout actions, refresh handling, JWT verifier, and `/api/v1/auth/me` route are implemented. Unit tests mock the signing key. The live Keycloak redirect, actual JWKS retrieval, and Docker runtime have not yet been verified. Numeric email OTP is not implemented.
 
 Keycloak email verification commonly uses a link; the product requirement asks for a numeric OTP. A code-based flow needs a Keycloak extension or an approved change to link-based verification. Mailpit captures local SMTP while that flow is developed.
 
