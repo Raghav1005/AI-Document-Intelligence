@@ -19,6 +19,7 @@ export default function HomePage() {
   const {
     status,
     username,
+    email,
     error,
     login,
     register,
@@ -26,7 +27,9 @@ export default function HomePage() {
     retryInitialization,
   } = useAuth();
   const [actionError, setActionError] = useState<string | null>(null);
-  const [pendingAction, setPendingAction] = useState<"login" | "register" | "logout" | "retry" | null>(null);
+  const [pendingAction, setPendingAction] = useState<
+    "login" | "register" | "logout" | "retry" | null
+  >(null);
 
   async function runAction(
     name: "login" | "register" | "logout" | "retry",
@@ -38,7 +41,9 @@ export default function HomePage() {
       await action();
     } catch (caught) {
       setActionError(
-        caught instanceof Error ? caught.message : "The request could not be completed.",
+        caught instanceof Error
+          ? caught.message
+          : "The request could not be completed.",
       );
     } finally {
       setPendingAction(null);
@@ -54,6 +59,38 @@ export default function HomePage() {
           <h1>Connecting to your local identity service</h1>
           <p>Checking your sign-in session…</p>
         </div>
+      </main>
+    );
+  }
+
+  if (status === "unverified") {
+    return (
+      <main className={styles.authStage}>
+        <section className={styles.loginCard} aria-labelledby="verify-title">
+          <Brand />
+          <div className={styles.loginAccent} aria-hidden="true">✉</div>
+          <p className={styles.eyebrow}>ONE MORE STEP</p>
+          <h1 id="verify-title">Verify your email.</h1>
+          <p className={styles.loginIntro}>
+            Verify your email address before opening your protected workspace.
+            {email ? <> We sent a verification link to <strong>{email}</strong>.</> : " Check your inbox for a verification link."}
+          </p>
+          {actionError && <div className={styles.authError} role="alert">{actionError}</div>}
+          <div className={styles.authActions}>
+            <button
+              className={styles.primaryAuthButton}
+              type="button"
+              disabled={pendingAction !== null}
+              onClick={() => void runAction("logout", logout)}
+            >
+              {pendingAction === "logout" ? "Returning to sign in…" : "I've verified — return to sign in"}
+            </button>
+          </div>
+          <p className={styles.localNote}>
+            In this local setup, outgoing verification messages are captured by Mailpit at{" "}
+            <a href="http://localhost:8025" target="_blank" rel="noreferrer">localhost:8025</a>.
+          </p>
+        </section>
       </main>
     );
   }
@@ -125,16 +162,6 @@ export default function HomePage() {
         <div className={styles.sidebarBottom}>
           <span className={styles.avatar}>{username?.slice(0, 1).toUpperCase() ?? "U"}</span>
           <span className={styles.username} title={username ?? "Signed in"}>{username ?? "Signed in"}</span>
-          <button
-            className={styles.logoutButton}
-            type="button"
-            aria-label="Sign out"
-            title="Sign out"
-            disabled={pendingAction !== null}
-            onClick={() => void runAction("logout", logout)}
-          >
-            {pendingAction === "logout" ? "…" : "↗"}
-          </button>
         </div>
       </aside>
 
@@ -144,6 +171,14 @@ export default function HomePage() {
           <div className={styles.topbarRight}>
             <span className={styles.userLabel}>{username}</span>
             <span className={styles.localBadge}><span /> Local-first</span>
+            <button
+              className={styles.logoutButton}
+              type="button"
+              disabled={pendingAction !== null}
+              onClick={() => void runAction("logout", logout)}
+            >
+              {pendingAction === "logout" ? "Signing out…" : "Logout"}
+            </button>
           </div>
         </header>
 

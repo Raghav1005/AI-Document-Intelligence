@@ -11,11 +11,17 @@ import {
   type ReactNode,
 } from "react";
 
-export type AuthStatus = "loading" | "authenticated" | "anonymous" | "error";
+export type AuthStatus =
+  | "loading"
+  | "authenticated"
+  | "unverified"
+  | "anonymous"
+  | "error";
 
 type AuthSnapshot = {
   status: AuthStatus;
   username: string | null;
+  email: string | null;
   error: string | null;
 };
 
@@ -33,8 +39,11 @@ type AuthListener = (snapshot: AuthSnapshot) => void;
 const INITIAL_SNAPSHOT: AuthSnapshot = {
   status: "loading",
   username: null,
+  email: null,
   error: null,
 };
+
+const LOGOUT_REDIRECT_URI = "http://localhost:3000";
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const listeners = new Set<AuthListener>();
@@ -62,8 +71,16 @@ function snapshotFromKeycloak(
     (typeof parsed?.preferred_username === "string" && parsed.preferred_username) ||
     (typeof parsed?.email === "string" && parsed.email) ||
     null;
+  const email = typeof parsed?.email === "string" ? parsed.email : null;
 
-  return { status, username, error };
+  return { status, username, email, error };
+}
+
+function authenticatedSnapshot(keycloak: Keycloak): AuthSnapshot {
+  return snapshotFromKeycloak(
+    keycloak,
+    keycloak.tokenParsed?.email_verified === true ? "authenticated" : "unverified",
+  );
 }
 
 function cancelRefreshTimer() {
@@ -95,7 +112,7 @@ async function refreshAccessToken(
   try {
     await keycloak.updateToken(minimumValiditySeconds);
     if (!keycloak.token) throw new Error("Keycloak returned no access token.");
-    publish(snapshotFromKeycloak(keycloak, "authenticated"));
+    publish(authenticatedSnapshot(keycloak));
     scheduleRefresh(keycloak);
     return keycloak.token;
   } catch {
@@ -104,6 +121,7 @@ async function refreshAccessToken(
     publish({
       status: "error",
       username: null,
+      email: null,
       error: "Your session could not be refreshed. Please sign in again.",
     });
     throw new Error("Your session could not be refreshed. Please sign in again.");
@@ -151,11 +169,11 @@ async function initializeKeycloak(config: AuthConfig): Promise<boolean> {
 
   if (!initialization) {
     keycloak.onAuthSuccess = () => {
-      publish(snapshotFromKeycloak(keycloak, "authenticated"));
+      publish(authenticatedSnapshot(keycloak));
       scheduleRefresh(keycloak);
     };
     keycloak.onAuthRefreshSuccess = () => {
-      publish(snapshotFromKeycloak(keycloak, "authenticated"));
+      publish(authenticatedSnapshot(keycloak));
       scheduleRefresh(keycloak);
     };
     keycloak.onAuthRefreshError = () => {
@@ -164,12 +182,13 @@ async function initializeKeycloak(config: AuthConfig): Promise<boolean> {
       publish({
         status: "error",
         username: null,
+        email: null,
         error: "Your session could not be refreshed. Please sign in again.",
       });
     };
     keycloak.onAuthLogout = () => {
       cancelRefreshTimer();
-      publish({ status: "anonymous", username: null, error: null });
+      publish({ status: "anonymous", username: null, email: null, error: null });
     };
     keycloak.onTokenExpired = () => {
       void refreshAccessToken(keycloak, 30).catch(() => undefined);
@@ -182,10 +201,9 @@ async function initializeKeycloak(config: AuthConfig): Promise<boolean> {
       })
       .then((authenticated) => {
         publish(
-          snapshotFromKeycloak(
-            keycloak,
-            authenticated ? "authenticated" : "anonymous",
-          ),
+          authenticated
+            ? authenticatedSnapshot(keycloak)
+            : { status: "anonymous", username: null, email: null, error: null },
         );
         if (authenticated) scheduleRefresh(keycloak);
         return authenticated;
@@ -198,6 +216,7 @@ async function initializeKeycloak(config: AuthConfig): Promise<boolean> {
         publish({
           status: "error",
           username: null,
+          email: null,
           error:
             error instanceof Error
               ? `Could not connect to Keycloak: ${error.message}`
@@ -255,7 +274,21 @@ export function AuthProvider({
   const logout = useCallback(async () => {
     if (!keycloakInstance) throw new Error("Keycloak is not initialized.");
     cancelRefreshTimer();
-    await keycloakInstance.logout({ redirectUri: window.location.origin });
+    const keycloak = keycloakInstance;
+    try {
+      const logoutRequest = keycloak.logout({ redirectUri: LOGOUT_REDIRECT_URI });
+      publish({ status: "anonymous", username: null, email: null, error: null });
+      await logoutRequest;
+    } catch (error) {
+      keycloak.clearToken();
+      publish({
+        status: "anonymous",
+        username: null,
+        email: null,
+        error: "You have been signed out, but Keycloak could not be reached.",
+      });
+      throw error;
+    }
   }, []);
 
   const getAccessToken = useCallback(
@@ -264,7 +297,12 @@ export function AuthProvider({
         throw new Error("Authentication has not finished initializing.");
       }
       await initialization;
-      return refreshAccessToken(keycloakInstance, minimumValiditySeconds);
+      const accessToken = await refreshAccessToken(keycloakInstance, minimumValiditySeconds);
+      if (keycloakInstance.tokenParsed?.email_verified !== true) {
+        publish(authenticatedSnapshot(keycloakInstance));
+        throw new Error("Verify your email before using protected workspace features.");
+      }
+      return accessToken;
     },
     [],
   );

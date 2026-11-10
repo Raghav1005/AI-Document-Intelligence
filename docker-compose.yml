@@ -18,6 +18,8 @@ services:
         condition: service_healthy
       keycloak:
         condition: service_healthy
+      keycloak-config:
+        condition: service_completed_successfully
     networks:
       - frontend-api
       - identity-service
@@ -54,6 +56,8 @@ services:
         condition: service_healthy
       keycloak:
         condition: service_healthy
+      keycloak-config:
+        condition: service_completed_successfully
       ollama:
         condition: service_healthy
     networks:
@@ -143,7 +147,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.8.2
     restart: unless-stopped
-    command: ["start-dev", "--health-enabled=true", "--http-management-health-enabled=true"]
+    command: ["start-dev", "--import-realm", "--health-enabled=true", "--http-management-health-enabled=true"]
     environment:
       KC_DB: postgres
       KC_DB_URL_HOST: keycloak-db
@@ -158,6 +162,8 @@ services:
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Set KEYCLOAK_ADMIN_PASSWORD in .env}
     ports:
       - "127.0.0.1:${KEYCLOAK_PORT:-8080}:8080"
+    volumes:
+      - ./infrastructure/keycloak/realm-import:/opt/keycloak/data/import:ro
     depends_on:
       keycloak-db:
         condition: service_healthy
@@ -174,6 +180,26 @@ services:
       retries: 10
       start_period: 60s
     stop_grace_period: 60s
+
+  keycloak-config:
+    image: python:3.13-alpine
+    restart: "no"
+    command: ["python", "/scripts/configure_realm.py"]
+    environment:
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-local-ai}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:?Set KEYCLOAK_ADMIN in .env}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Set KEYCLOAK_ADMIN_PASSWORD in .env}
+    volumes:
+      - ./infrastructure/keycloak/configure_realm.py:/scripts/configure_realm.py:ro
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    networks:
+      - identity-service
+      - smtp
 
   ollama:
     image: ollama/ollama:0.40.16

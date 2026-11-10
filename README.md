@@ -4,7 +4,7 @@ A locally hosted document processing and retrieval-augmented chat platform. The 
 
 ## Current status
 
-The repository contains the infrastructure foundation, a protected Next.js workspace shell, Keycloak browser authentication, FastAPI JWT verification, and unit tests. Numeric OTP, application persistence, document processing, and chat remain planned feature work. The live Keycloak flow and Docker runtime still need end-to-end verification.
+The repository contains the infrastructure foundation, a protected Next.js workspace shell, Keycloak browser authentication with PKCE S256, email-verification enforcement in the frontend and API, reproducible local SMTP settings, and unit tests. Numeric OTP, application persistence, document processing, and chat remain planned feature work.
 
 ## Prerequisites
 
@@ -33,6 +33,8 @@ The initial model settings are placeholders for later backend integration. Hardw
 
 The app and vector databases do not publish host ports and share only the API data network with FastAPI and Ollama. The frontend shares the API proxy and identity-service networks, not the database network. Keycloak's database uses an isolated internal network; Keycloak and Mailpit share a separate SMTP network. Keycloak uses development configuration; do not expose this stack publicly.
 
+New registrations must verify their email before accessing the workspace. Keycloak sends local verification messages to Mailpit; inspect them at [http://localhost:8025](http://localhost:8025). This inbox captures development mail and does not deliver messages externally. Realm import settings and an idempotent `keycloak-config` startup job enable registration, make verification a default required action, and configure Mailpit for both new and existing Keycloak databases.
+
 After the Ollama service is available, model downloads are explicit:
 
 ```powershell
@@ -56,6 +58,7 @@ Named volumes retain application database data, vector data, Keycloak data, and 
 | `vector-db` | PostgreSQL with pgvector extension | Internal network only |
 | `keycloak-db` | Keycloak persistence | Internal network only |
 | `keycloak` | OIDC identity service | `localhost:8080` |
+| `keycloak-config` | Applies email verification and SMTP settings on startup | Internal one-shot job |
 | `mailpit` | Development SMTP capture and inbox | `localhost:1025`, `localhost:8025` |
 | `ollama` | Local model runtime | `localhost:11434` |
 | `backend` | FastAPI health/API process | `localhost:8000` |
@@ -68,7 +71,7 @@ From the repository root, validate the Compose file with `docker compose --env-f
 ## Design notes
 
 - The frontend uses the public Keycloak OIDC client with Authorization Code Flow and PKCE S256. Access/refresh tokens stay in memory and are not written to local or session storage.
-- FastAPI validates JWT signature, issuer, expiration, and authorized client (`azp`) independently using Keycloak JWKS. An optional audience check is available when a Keycloak audience mapper is configured.
+- FastAPI validates JWT signature, issuer, expiration, and authorized client (`azp`) independently using Keycloak JWKS, and requires the signed `email_verified` claim to be true for protected routes. Health endpoints remain public. An optional audience check is available when a Keycloak audience mapper is configured.
 - Application and vector data are separate from Keycloak identity data.
 - Local inference will not send documents or conversations to external AI APIs.
 - Numeric email OTP may require a custom Keycloak extension; the default verification-link flow is not equivalent to a code-based OTP.

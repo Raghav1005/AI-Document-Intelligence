@@ -1,6 +1,6 @@
 # Authentication Decision
 
-**Status: Frontend integration and backend JWT verification implemented; live Keycloak flow not yet runtime-verified.** Use self-hosted Keycloak as the OIDC provider and `keycloak-js` as a public browser client. FastAPI independently verifies access JWTs using Keycloak JWKS.
+**Status: Keycloak public-client login, logout, verified-email gating, and backend JWT checks implemented.** Use self-hosted Keycloak as the OIDC provider and `keycloak-js` as a public browser client. FastAPI independently verifies access JWTs using Keycloak JWKS and requires the signed `email_verified: true` claim for protected routes.
 
 ## Comparison
 
@@ -19,7 +19,15 @@ Keycloak's usual email verification action is link based. A numeric OTP requirem
 
 ## Failure behavior and risks
 
-After a valid access token is issued, FastAPI verifies using cached JWKS; JWKS fetch uses the container-internal Keycloak URL while the token issuer is checked against the browser-visible issuer. Login, refresh, and logout depend on Keycloak. The API validates `iss`, `exp`, signature, and `azp` against `local-ai-frontend`; an optional audience can be required after an audience mapper is configured. Key rotation and issuer/client configuration errors can reject valid requests or, if validation is weakened, admit forged tokens.
+After a valid access token is issued, FastAPI verifies using cached JWKS; JWKS fetch uses the container-internal Keycloak URL while the token issuer is checked against the browser-visible issuer. Login, refresh, logout, and email verification depend on Keycloak. The API validates RS256 signature, `iss`, `exp`, `sub`, and `azp` against `local-ai-frontend`; an optional audience can be required after an audience mapper is configured. It returns 403 unless `email_verified` is exactly `true`. Health routes remain public. Key rotation and issuer/client configuration errors can reject valid requests or, if validation is weakened, admit forged tokens.
+
+## Email verification and SMTP
+
+The `local-ai` realm enables registration, requires Keycloak's `VERIFY_EMAIL` required action, and sets `verifyEmail=true`. The frontend keeps users with a missing or false `email_verified` claim on a verification screen. All protected backend routes must depend on `get_email_verified_claims`, which first performs normal signature and issuer validation and then requires the claim to be true.
+
+For local development, Keycloak sends mail through Mailpit at `mailpit:1025` on the shared Docker `smtp` network. The sender is `no-reply@local-ai.local`; SMTP authentication, SSL, and STARTTLS are disabled. Mailpit captures messages at [http://localhost:8025](http://localhost:8025); this is local capture, not delivery to an external mailbox. A versioned realm import configures new databases, and the `keycloak-config` startup job applies the same settings to an already persisted realm. The public `local-ai-frontend` client stays secret-free and uses PKCE S256.
+
+For production, replace Mailpit with an SMTP provider and configure its host, port, sender address, TLS mode, authentication mode, username, and password using deployment secrets. Store SMTP credentials only in Keycloak's server-side configuration or a secret manager, never in frontend environment variables or browser code. Configure the provider's permitted sender/domain and test verification links against the production public hostname before opening registration.
 
 ## Revisit when
 

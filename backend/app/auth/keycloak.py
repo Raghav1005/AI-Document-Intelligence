@@ -122,4 +122,16 @@ def get_current_claims(
 ) -> dict[str, Any]:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise unauthorized()
-    return verifier.verify(credentials.credentials)\n
+    return verifier.verify(credentials.credentials)
+
+
+def get_email_verified_claims(
+    claims: dict[str, Any] = Depends(get_current_claims),
+) -> dict[str, Any]:
+    """Require Keycloak's signed email_verified claim for application APIs."""
+    if claims.get("email_verified") is not True:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Verify your email address before accessing the workspace.",
+        )
+    return claims

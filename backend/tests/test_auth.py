@@ -43,6 +43,7 @@ def make_token(private_key: object, settings: KeycloakSettings, **overrides: obj
         "azp": settings.client_id,
         "preferred_username": "raghav",
         "email": "raghav@example.test",
+        "email_verified": True,
         "realm_access": {"roles": ["user"]},
     }
     claims.update(overrides)
@@ -97,6 +98,38 @@ def test_valid_jwt_returns_claim_identity(auth_client: tuple[TestClient, object,
     }
 
 
+def test_unverified_email_is_forbidden(auth_client: tuple[TestClient, object, object]) -> None:
+    client, private_key, settings = auth_client
+    token = make_token(private_key, settings, email_verified=False)
+
+    response = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Verify your email address before accessing the workspace."
+
+
+def test_missing_email_verified_claim_is_forbidden(
+    auth_client: tuple[TestClient, object, object],
+) -> None:
+    client, private_key, settings = auth_client
+    claims = jwt.decode(
+        make_token(private_key, settings),
+        options={"verify_signature": False, "verify_exp": False},
+    )
+    claims.pop("email_verified")
+    token = jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": "test-key"})
+
+    response = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 403
+
+
+def test_health_endpoints_remain_public() -> None:
+    with TestClient(app) as client:
+        assert client.get("/health/live").status_code == 200
+        assert client.get("/health/ready").status_code == 200
+
+
 def test_wrong_authorized_client_is_rejected(
     auth_client: tuple[TestClient, object, object],
 ) -> None:
@@ -105,4 +138,4 @@ def test_wrong_authorized_client_is_rejected(
 
     response = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
 
-    assert response.status_code == 401\n
+    assert response.status_code == 401
