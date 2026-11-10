@@ -1,0 +1,36 @@
+.frame { display: flex; min-height: 100vh; }
+.sidebar { width: 248px; flex: 0 0 248px; padding: 25px 16px 17px; display: flex; flex-direction: column; background: #f0f1ed; border-right: 1px solid #e3e5df; color: #555f5a; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 7px; color: #202a25; font-size: 15px; font-weight: 650; letter-spacing: -.2px; }
+.mark { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px; background: #1f4338; color: #e9f5e9; font-family: Georgia, serif; font-size: 17px; }
+.newChat { margin: 30px 0 25px; display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 12px; border: 1px solid #d9ddd7; border-radius: 9px; background: #fafbf9; color: #39453e; text-align: left; font-size: 13px; }
+.newChat:disabled { opacity: .78; }
+.sidebarLabel { padding: 0 10px 10px; color: #909892; font-size: 9px; letter-spacing: 1.2px; font-weight: 700; }
+.navItem { display: flex; align-items: center; gap: 11px; padding: 10px; font-size: 12px; color: #69726c; }
+.sidebarBottom { margin-top: auto; display: flex; align-items: center; gap: 9px; padding: 13px 7px 0; border-top: 1px solid #dfe2dc; font-size: 11px; }
+.avatar { display: grid; width: 27px; height: 27px; place-items: center; border-radius: 50%; background: #d9e5dc; color: #365a4b; font-size: 11px; font-weight: 700; }
+.statusDot { width: 7px; height: 7px; margin-left: auto; border-radius: 50%; background: #d4a34c; }
+.main { flex: 1; min-width: 0; }
+.topbar { height: 62px; display: flex; align-items: center; justify-content: space-between; padding: 0 34px; border-bottom: 1px solid #ebece8; color: #727a75; font-size: 11px; }
+.slash { padding: 0 7px; color: #b2b8b3; }
+.localBadge { display: flex; align-items: center; gap: 7px; color: #52675c; font-size: 10px; }
+.localBadge span { width: 6px; height: 6px; border-radius: 50%; background: #6e9a76; }
+.content { width: min(900px, calc(100% - 64px)); margin: clamp(64px, 12vh, 116px) auto 50px; }
+.eyebrow { margin-bottom: 13px; color: #798a7d; font-size: 9px; font-weight: 700; letter-spacing: 1.45px; }
+.content h1 { margin: 0; color: #1f3029; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(30px, 4vw, 43px); font-weight: 400; letter-spacing: -1.5px; }
+.intro { max-width: 490px; margin: 14px 0 32px; color: #778079; font-size: 13px; line-height: 1.65; }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.card { min-height: 205px; padding: 18px 17px 15px; display: flex; flex-direction: column; border: 1px solid #e5e8e2; border-radius: 11px; background: #fff; }
+.cardIcon { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 9px; background: #eff3ee; color: #52705d; font-size: 16px; }
+.card h2 { margin: 16px 0 7px; color: #293831; font-size: 13px; font-weight: 650; }
+.card p { margin: 0; color: #828a84; font-size: 11px; line-height: 1.6; }
+.cardFoot { margin-top: auto; padding-top: 15px; color: #9ca49e; font-size: 8px; letter-spacing: .9px; }
+.cardFoot span { float: right; color: #a0aaa2; }
+.notice { display: flex; align-items: center; gap: 12px; margin-top: 21px; padding: 14px 16px; border: 1px solid #e7e9e4; border-radius: 10px; background: #f3f5f1; }
+.noticeIcon { color: #718879; font-size: 17px; }
+.notice div { display: flex; flex-direction: column; gap: 4px; }
+.notice strong { color: #40554a; font-size: 11px; font-weight: 650; }
+.notice div span { color: #849087; font-size: 10px; }
+.composer { display: flex; align-items: center; justify-content: space-between; min-height: 51px; margin-top: 34px; padding: 7px 8px 7px 16px; border: 1px solid #e2e5df; border-radius: 12px; background: #fff; color: #a0a7a1; font-size: 11px; }
+.composer button { width: 32px; height: 32px; border: 0; border-radius: 9px; background: #e4e9e3; color: #88938b; font-size: 18px; }
+.caption { margin: 11px 0 0; color: #a1a8a2; font-size: 9px; text-align: center; }
+@media (max-width: 760px) { .sidebar { width: 66px; flex-basis: 66px; padding: 18px 10px; align-items: center; } .brand { padding: 0; } .brand > span:last-child, .newChat, .sidebarLabel, .navItem span, .sidebarBottom > span:not(.avatar) { display: none; } .navItem { padding: 11px; } .sidebarBottom { justify-content: center; width: 100%; } .topbar { padding: 0 18px; } .content { width: calc(100% - 36px); margin-top: 65px; } .cards { grid-template-columns: 1fr; } .card { min-height: 165px; } }

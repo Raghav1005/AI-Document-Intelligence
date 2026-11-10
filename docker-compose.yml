@@ -1,0 +1,205 @@
+name: local-ai-platform
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_URL: http://backend:8000
+      KEYCLOAK_PUBLIC_URL: http://localhost:${KEYCLOAK_PORT:-8080}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-local-ai}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    networks:
+      - frontend-api
+      - identity-service
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_DATABASE_URL: postgresql+asyncpg://${POSTGRES_APP_USER:?Set POSTGRES_APP_USER in .env}:${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}@app-db:5432/${POSTGRES_APP_DB:?Set POSTGRES_APP_DB in .env}
+      VECTOR_DATABASE_URL: postgresql+asyncpg://${POSTGRES_VECTOR_USER:?Set POSTGRES_VECTOR_USER in .env}:${POSTGRES_VECTOR_PASSWORD:?Set POSTGRES_VECTOR_PASSWORD in .env}@vector-db:5432/${POSTGRES_VECTOR_DB:?Set POSTGRES_VECTOR_DB in .env}
+      KEYCLOAK_ISSUER: http://localhost:${KEYCLOAK_PORT:-8080}/realms/${KEYCLOAK_REALM:-local-ai}
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen2.5:3b-instruct-q4_K_M}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-embeddinggemma:latest}
+    depends_on:
+      app-db:
+        condition: service_healthy
+      vector-db:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    networks:
+      - frontend-api
+      - api-data
+      - identity-service
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  app-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_APP_DB:?Set POSTGRES_APP_DB in .env}
+      POSTGRES_USER: ${POSTGRES_APP_USER:?Set POSTGRES_APP_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}
+    volumes:
+      - app-db-data:/var/lib/postgresql/data
+    networks:
+      - api-data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    stop_grace_period: 30s
+
+  vector-db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_VECTOR_DB:?Set POSTGRES_VECTOR_DB in .env}
+      POSTGRES_USER: ${POSTGRES_VECTOR_USER:?Set POSTGRES_VECTOR_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_VECTOR_PASSWORD:?Set POSTGRES_VECTOR_PASSWORD in .env}
+    volumes:
+      - vector-db-data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/vector-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - api-data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} && psql -U $${POSTGRES_USER} -d $${POSTGRES_DB} -tAc \"SELECT 1 FROM pg_extension WHERE extname = 'vector'\" | grep -q 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    stop_grace_period: 30s
+
+  keycloak-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_KEYCLOAK_DB:?Set POSTGRES_KEYCLOAK_DB in .env}
+      POSTGRES_USER: ${POSTGRES_KEYCLOAK_USER:?Set POSTGRES_KEYCLOAK_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_KEYCLOAK_PASSWORD:?Set POSTGRES_KEYCLOAK_PASSWORD in .env}
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    networks:
+      - identity-data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    stop_grace_period: 30s
+
+  mailpit:
+    image: axllent/mailpit:v1.33.1
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+    networks:
+      - smtp
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.2
+    restart: unless-stopped
+    command: ["start-dev", "--health-enabled=true", "--http-management-health-enabled=true"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: keycloak-db
+      KC_DB_URL_DATABASE: ${POSTGRES_KEYCLOAK_DB:?Set POSTGRES_KEYCLOAK_DB in .env}
+      KC_DB_USERNAME: ${POSTGRES_KEYCLOAK_USER:?Set POSTGRES_KEYCLOAK_USER in .env}
+      KC_DB_PASSWORD: ${POSTGRES_KEYCLOAK_PASSWORD:?Set POSTGRES_KEYCLOAK_PASSWORD in .env}
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME: localhost
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:?Set KEYCLOAK_ADMIN in .env}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Set KEYCLOAK_ADMIN_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${KEYCLOAK_PORT:-8080}:8080"
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    networks:
+      - identity-data
+      - identity-service
+      - smtp
+    healthcheck:
+      test: ["CMD", "bash", "-ec", "{ printf 'HEAD /health/ready HTTP/1.0\\r\\n\\r\\n' >&0; grep -q 'HTTP/1.0 200'; } 0<>/dev/tcp/localhost/9000"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    stop_grace_period: 60s
+
+  ollama:
+    image: ollama/ollama:0.40.16
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - api-data
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    stop_grace_period: 60s
+
+networks:
+  frontend-api:
+    driver: bridge
+  api-data:
+    driver: bridge
+  identity-service:
+    driver: bridge
+  identity-data:
+    driver: bridge
+    internal: true
+  smtp:
+    driver: bridge
+
+volumes:
+  app-db-data:
+  vector-db-data:
+  keycloak-db-data:
+  ollama-data:
