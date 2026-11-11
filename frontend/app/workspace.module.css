@@ -6,8 +6,16 @@
 .newButton:disabled { opacity: .6; cursor: wait; }
 .sectionLabel { color: #8b958e; font-size: 9px; font-weight: 700; letter-spacing: 1.15px; }
 .conversationList { display: grid; align-content: start; gap: 4px; overflow: auto; padding-top: 9px; }
-.conversationItem { display: grid; gap: 4px; width: 100%; padding: 10px; border: 0; border-radius: 8px; background: transparent; color: #435149; font: inherit; font-size: 11px; text-align: left; cursor: pointer; }
-.conversationItem > span, .conversationItem small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conversationItem { position: relative; display: grid; gap: 4px; width: 100%; padding: 10px; border-radius: 8px; color: #435149; font-size: 11px; }
+.conversationOpen { display: grid; gap: 4px; width: 100%; padding: 0 27px 0 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.conversationOpen > span, .conversationOpen small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conversationActions { position: absolute; top: 4px; right: 4px; }
+.conversationMenuButton { width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: #66756a; font-size: 18px; line-height: 1; cursor: pointer; }
+.conversationMenuButton:hover, .conversationMenuButton[aria-expanded="true"] { background: #dce3db; }
+.conversationMenu { position: absolute; z-index: 4; top: 27px; right: 0; display: grid; min-width: 126px; padding: 4px; border: 1px solid #e0e5df; border-radius: 8px; background: #fff; box-shadow: 0 8px 22px rgba(27, 40, 31, .14); }
+.conversationMenu button { padding: 8px 10px; border: 0; border-radius: 5px; background: transparent; color: #38483e; font: inherit; font-size: 11px; text-align: left; cursor: pointer; }
+.conversationMenu button:hover, .conversationMenu button:focus-visible { background: #f0f3ef; outline: none; }
+.conversationMenu button:last-child { color: #a3443c; }
 .conversationItem small { color: #929b94; font-size: 9px; }
 .conversationItem:hover, .activeConversation { background: #e8ece6; }
 .muted { margin: 13px 7px; color: #9aa29c; font-size: 10px; line-height: 1.6; }
@@ -71,8 +79,17 @@
 .documentError { margin: 6px 4px 0; color: #aa5a4e; font-size: 8px; line-height: 1.5; }
 .retryDocument { margin: 5px 4px 0; padding: 3px 6px; border: 1px solid #cbd7cc; border-radius: 5px; background: #f7f9f6; color: #476b54; font-size: 8px; cursor: pointer; }
 .retryDocument:disabled { opacity: .6; cursor: wait; }
+.dialogBackdrop { position: fixed; z-index: 10; inset: 0; display: grid; place-items: center; padding: 18px; background: rgba(22, 31, 25, .48); }
+.deleteDialog { width: min(100%, 410px); padding: 22px; border: 1px solid #e1e6df; border-radius: 13px; background: #fff; box-shadow: 0 18px 60px rgba(20, 32, 24, .24); color: #34443a; }
+.deleteDialog h2 { margin: 0; font-size: 16px; font-weight: 650; }
+.deleteDialog > p { margin: 12px 0 0; color: #748078; font-size: 11px; line-height: 1.65; overflow-wrap: anywhere; }
+.deleteDialog .dialogError { color: #a3443c; }
+.dialogActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 21px; }
+.dialogActions button { min-height: 34px; padding: 0 13px; border: 1px solid #dfe5dd; border-radius: 7px; background: #fff; color: #46564b; font: inherit; font-size: 10px; cursor: pointer; }
+.dialogActions button:disabled { opacity: .6; cursor: wait; }
+.dialogActions .confirmDelete { border-color: #9d433c; background: #a44840; color: #fff; }
 .privacyNote { margin-top: auto; padding-top: 14px; color: #a1a9a2; font-size: 8px; line-height: 1.5; }
 .dragOverlay { position: fixed; z-index: 5; inset: 12px; display: grid; place-items: center; border: 2px dashed #6a9271; border-radius: 18px; background: rgba(238, 245, 237, .93); pointer-events: none; }
 .dragOverlay div { padding: 20px; color: #355b40; font-family: Georgia, serif; font-size: 25px; }
 @media (max-width: 1080px) { .workspace { grid-template-columns: 220px minmax(340px, 1fr); } .documentsPane { grid-column: 1 / -1; display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 0 16px; border-top: 1px solid #e7eae5; border-left: 0; } .documentHeader { grid-column: 1; } .dropZone { grid-column: 1; } .documentList { grid-column: 2; grid-row: 1 / span 2; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0; } .privacyNote { display: none; } }
-@media (max-width: 680px) { .workspace { display: flex; flex-direction: column; } .sidebar { min-height: 58px; flex-direction: row; align-items: center; gap: 9px; padding: 9px 11px; border-right: 0; border-bottom: 1px solid #e6e9e4; } .brand { flex: 0 0 auto; } .newButton { margin: 0; min-height: 34px; padding: 0 9px; font-size: 9px; } .sectionLabel, .conversationList { display: none; } .sidebarFooter { justify-content: flex-end; gap: 5px; margin: 0 0 0 auto; padding: 0; border: 0; } .sidebarFooter .avatar { width: 23px; height: 23px; flex-basis: 23px; } .sidebarFooter > span:nth-child(2) { max-width: 73px; font-size: 8px; } .sidebarFooter button { font-size: 8px; } .mainPane { min-height: 67vh; flex: 1; } .header { padding: 0 13px; } .chat { min-height: 300px; padding: 22px 14px; } .emptyState { min-height: 240px; } .emptyState h1 { font-size: 27px; } .emptyState p { font-size: 10px; } .composerWrap { padding: 10px 12px 13px; } .documentsPane { display: block; padding: 17px 13px 12px; border-top: 1px solid #e7eae5; } .documentHeader { margin-bottom: 10px; } .dropZone { min-height: 80px; } .documentList { grid-template-columns: 1fr; max-height: 230px; } .privacyNote { display: block; } }
+@media (max-width: 680px) { .workspace { display: flex; flex-direction: column; } .sidebar { min-height: 58px; flex-direction: row; align-items: center; gap: 9px; padding: 9px 11px; border-right: 0; border-bottom: 1px solid #e6e9e4; } .brand { flex: 0 0 auto; } .newButton { margin: 0; min-height: 34px; padding: 0 9px; font-size: 9px; } .sectionLabel { display: none; } .conversationList { display: flex; min-width: 0; flex: 1; gap: 4px; overflow-x: auto; padding: 0; } .conversationItem { flex: 0 0 150px; padding: 7px; } .conversationOpen { font-size: 9px; } .conversationItem small { font-size: 8px; } .sidebarFooter { justify-content: flex-end; gap: 5px; margin: 0 0 0 auto; padding: 0; border: 0; } .sidebarFooter .avatar { width: 23px; height: 23px; flex-basis: 23px; } .sidebarFooter > span:nth-child(2) { max-width: 73px; font-size: 8px; } .sidebarFooter button { font-size: 8px; } .mainPane { min-height: 67vh; flex: 1; } .header { padding: 0 13px; } .chat { min-height: 300px; padding: 22px 14px; } .emptyState { min-height: 240px; } .emptyState h1 { font-size: 27px; } .emptyState p { font-size: 10px; } .composerWrap { padding: 10px 12px 13px; } .documentsPane { display: block; padding: 17px 13px 12px; border-top: 1px solid #e7eae5; } .documentHeader { margin-bottom: 10px; } .dropZone { min-height: 80px; } .documentList { grid-template-columns: 1fr; max-height: 230px; } .privacyNote { display: block; } }

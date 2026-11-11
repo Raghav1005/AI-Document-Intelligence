@@ -13,6 +13,7 @@ from app.auth.keycloak import get_email_verified_claims
 from app.schemas.workspace import (
     ConversationCreate,
     ConversationListItem,
+    ConversationRename,
     ConversationResponse,
     DocumentResponse,
     MessageCreate,
@@ -69,6 +70,31 @@ async def get_conversation(conversation_id: UUID, claims: Claims, store: Store) 
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found.")
     return conversation
+
+
+@router.patch("/conversations/{conversation_id}", response_model=ConversationListItem)
+async def rename_conversation(
+    conversation_id: UUID, payload: ConversationRename, claims: Claims, store: Store
+) -> dict:
+    try:
+        conversation = await store.rename_conversation(
+            owner(claims), conversation_id, payload.title,
+        )
+    except SQLAlchemyError as error:
+        raise HTTPException(status_code=503, detail="Conversation storage is temporarily unavailable.") from error
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return conversation
+
+
+@router.delete("/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_conversation(conversation_id: UUID, claims: Claims, store: Store) -> None:
+    try:
+        deleted = await store.delete_conversation(owner(claims), conversation_id)
+    except SQLAlchemyError as error:
+        raise HTTPException(status_code=503, detail="Conversation storage is temporarily unavailable.") from error
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=MessageResponse)

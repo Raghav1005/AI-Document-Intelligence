@@ -53,6 +53,34 @@ class WorkspaceStore:
         result["messages"] = [dict(message) for message in messages]
         return result
 
+    async def rename_conversation(self, owner_id: str, conversation_id: UUID, title: str) -> dict | None:
+        await ensure_schema()
+        async with get_engine().begin() as connection:
+            row = (await connection.execute(text("""
+                UPDATE workspace_conversations
+                SET title=:title, updated_at=NOW()
+                WHERE id=:id AND owner_id=:owner_id
+                RETURNING id, title, created_at, updated_at
+            """), {
+                "id": conversation_id, "owner_id": owner_id, "title": title,
+            })).mappings().first()
+        return dict(row) if row else None
+
+    async def delete_conversation(self, owner_id: str, conversation_id: UUID) -> bool:
+        """Delete an owned conversation and its messages in one transaction."""
+        await ensure_schema()
+        async with get_engine().begin() as connection:
+            await connection.execute(text("""
+                DELETE FROM workspace_messages
+                WHERE conversation_id=:id AND owner_id=:owner_id AND role='assistant'
+            """), {"id": conversation_id, "owner_id": owner_id})
+            row = (await connection.execute(text("""
+                DELETE FROM workspace_conversations
+                WHERE id=:id AND owner_id=:owner_id
+                RETURNING id
+            """), {"id": conversation_id, "owner_id": owner_id})).first()
+        return row is not None
+
     async def begin_message(
         self, *, owner_id: str, conversation_id: UUID, client_message_id: str, content: str
     ) -> tuple[str, dict | None]:
@@ -249,7 +277,7 @@ class WorkspaceStore:
 
     async def retrieve_chunks(
         self, *, owner_id: str, document_ids: list[UUID], embedding: list[float],
-        limit: int = 8, max_distance: float = 0.72,
+        limit: int = 8, max_distance: float | None = 0.72,
     ) -> list[dict]:
         await ensure_schema()
         vector = "[" + ",".join(f"{value:.9g}" for value in embedding) + "]"
@@ -260,13 +288,45 @@ class WorkspaceStore:
                 FROM workspace_chunks c
                 JOIN workspace_documents d ON d.id=c.document_id AND d.owner_id=c.owner_id
                 WHERE c.owner_id=:owner_id AND d.status='completed' AND c.document_id=ANY(:document_ids)
-                  AND c.embedding <=> CAST(:embedding AS vector) <= :max_distance
+                  AND (
+                    CAST(:max_distance AS FLOAT) IS NULL
+                    OR c.embedding <=> CAST(:embedding AS vector) <= CAST(:max_distance AS FLOAT)
+                  )
                 ORDER BY c.embedding <=> CAST(:embedding AS vector) LIMIT :limit
             """), {
                 "owner_id": owner_id, "document_ids": document_ids,
                 "embedding": vector, "limit": limit, "max_distance": max_distance,
             })).mappings().all()
         return [dict(row) for row in rows]
+
+    async def retrieve_keyword_chunks(
+        self, *, owner_id: str, document_ids: list[UUID], keywords: list[str], limit: int = 8,
+    ) -> tuple[list[dict], int]:
+        """Scan selected completed documents for every chunk matching lexical terms."""
+        await ensure_schema()
+        terms = list(dict.fromkeys(term for term in keywords if term))
+        if not terms:
+            return [], 0
+        conditions = [f"c.content ILIKE :keyword_{index} ESCAPE '!'" for index in range(len(terms))]
+        parameters: dict[str, object] = {
+            "owner_id": owner_id, "document_ids": document_ids, "limit": limit,
+        }
+        for index, term in enumerate(terms):
+            escaped = term.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+            parameters[f"keyword_{index}"] = f"%{escaped}%"
+        async with get_engine().connect() as connection:
+            rows = (await connection.execute(text(f"""
+                SELECT c.document_id, d.filename, c.page_number, c.chunk_index, c.content,
+                       COUNT(*) OVER() AS total_matches
+                FROM workspace_chunks c
+                JOIN workspace_documents d ON d.id=c.document_id AND d.owner_id=c.owner_id
+                WHERE c.owner_id=:owner_id AND d.status='completed' AND c.document_id=ANY(:document_ids)
+                  AND ({' OR '.join(conditions)})
+                ORDER BY c.document_id, c.chunk_index
+                LIMIT :limit
+            """), parameters)).mappings().all()
+        total = int(rows[0]["total_matches"]) if rows else 0
+        return [dict(row) for row in rows], total
 
     async def validate_selected_documents(self, *, owner_id: str, document_ids: list[UUID]) -> list[str]:
         """Verify every requested document belongs to the caller and is indexed."""

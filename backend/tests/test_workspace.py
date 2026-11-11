@@ -3,6 +3,7 @@
 import asyncio
 import io
 import os
+import re
 import time
 from uuid import UUID, uuid4
 
@@ -26,6 +27,21 @@ def text_docx(text: str) -> bytes:
     output = io.BytesIO()
     document = DocxDocument()
     document.add_paragraph(text)
+    document.save(output)
+    return output.getvalue()
+
+
+def experiment_docx() -> bytes:
+    output = io.BytesIO()
+    document = DocxDocument()
+    document.add_paragraph("The project code is violet 7314.")
+    document.add_paragraph("EXPERIMENT 6: Evaluate the first model on CIFAR.")
+    document.add_paragraph(
+        "Unrelated notes describe data preparation, image normalization, training schedules, "
+        "validation metrics, and routine laboratory procedures. " * 35
+    )
+    document.add_paragraph("EXPERIMENT 7: Compare the second model against the baseline.")
+    document.add_paragraph("The appendix refers to EXPERIMENT 7 again.")
     document.save(output)
     return output.getvalue()
 
@@ -105,6 +121,7 @@ def test_workspace_endpoints_reject_unauthenticated_requests() -> None:
     with TestClient(app) as client:
         assert client.get("/api/v1/conversations").status_code == 401
         assert client.get("/api/v1/documents").status_code == 401
+        assert client.delete(f"/api/v1/conversations/{uuid4()}").status_code == 401
 
 
 @pytest.mark.skipif(
@@ -154,6 +171,7 @@ def test_live_workspace_chat_upload_ocr_and_rag(monkeypatch: pytest.MonkeyPatch)
             uploads = [
                 ("files", ("notes.txt", text.encode(), "text/plain")),
                 ("files", ("notes.docx", text_docx(text), "application/octet-stream")),
+                ("files", ("experiments.docx", experiment_docx(), "application/octet-stream")),
                 ("files", ("notes.pdf", text_pdf(text), "application/pdf")),
                 ("files", ("scan.png", text_image("OCR SAMPLE 4281", "PNG"), "image/png")),
                 ("files", ("scan.jpg", text_image("OCR SAMPLE 4281", "JPEG"), "image/jpeg")),
@@ -167,7 +185,7 @@ def test_live_workspace_chat_upload_ocr_and_rag(monkeypatch: pytest.MonkeyPatch)
             uploaded = await client.post("/api/v1/documents/upload", files=uploads)
             assert uploaded.status_code == 202, uploaded.text
             documents = uploaded.json()["documents"]
-            assert len(documents) == 6
+            assert len(documents) == 7
             deadline = time.monotonic() + 180
             statuses: dict[str, dict] = {}
             while time.monotonic() < deadline:
@@ -191,6 +209,7 @@ def test_live_workspace_chat_upload_ocr_and_rag(monkeypatch: pytest.MonkeyPatch)
             assert any("OCR SAMPLE" in chunk.upper() for chunk in ocr_chunks)
 
             docx_doc = next(item for item in documents if item["filename"] == "notes.docx")
+            experiment_document = next(item for item in documents if item["filename"] == "experiments.docx")
             async with get_engine().connect() as connection:
                 indexed_chunks = (await connection.execute(sql_text("""
                     SELECT content, vector_dims(embedding) AS embedding_dimensions
@@ -200,14 +219,28 @@ def test_live_workspace_chat_upload_ocr_and_rag(monkeypatch: pytest.MonkeyPatch)
             assert all(row["embedding_dimensions"] == 768 for row in indexed_chunks)
             assert "7314" in " ".join(row["content"] for row in indexed_chunks)
 
+            async with get_engine().connect() as connection:
+                experiment_chunks = (await connection.execute(sql_text("""
+                    SELECT chunk_index, content FROM workspace_chunks
+                    WHERE document_id=:id AND owner_id=:owner_id ORDER BY chunk_index
+                """), {"id": UUID(experiment_document["id"]), "owner_id": owner_id})).mappings().all()
+            six_indices = [row["chunk_index"] for row in experiment_chunks if "EXPERIMENT 6" in row["content"]]
+            seven_indices = [row["chunk_index"] for row in experiment_chunks if "EXPERIMENT 7" in row["content"]]
+            assert six_indices and seven_indices and min(six_indices) < min(seven_indices)
+            assert any(
+                six_indices[0] < row["chunk_index"] < seven_indices[0]
+                and "EXPERIMENT" not in row["content"]
+                for row in experiment_chunks
+            )
+
             from app.workspace import processing as processing_module
 
-            original_generate = processing_module.generate
+            ollama_generate = processing_module.generate
             captured_prompts: list[list[dict[str, str]]] = []
 
             async def capture_generate(messages: list[dict[str, str]]) -> str:
                 captured_prompts.append(messages)
-                return await original_generate(messages)
+                return await ollama_generate(messages)
 
             monkeypatch.setattr(processing_module, "generate", capture_generate)
             rag_message = await client.post(
@@ -226,6 +259,63 @@ def test_live_workspace_chat_upload_ocr_and_rag(monkeypatch: pytest.MonkeyPatch)
             prompt_text = "\n".join(message["content"] for message in captured_prompts[-1])
             assert "Experiment number: 7314" in prompt_text
             assert "[Source 1: notes.docx" in prompt_text
+
+            all_experiments = await client.post(
+                f"/api/v1/conversations/{conversation_id}/messages",
+                json={
+                    "message": "List all experiment no.",
+                    "client_message_id": f"msg_{uuid4().hex}",
+                    "document_ids": [experiment_document["id"]],
+                },
+            )
+            assert all_experiments.status_code == 200, all_experiments.text
+            answer = all_experiments.json()["content"]
+            answer_numbers = re.findall(r"\bEXPERIMENT\s*[-:#]?\s*(\d+)\b", answer, re.IGNORECASE)
+            assert set(answer_numbers) == {"6", "7"}
+            assert answer_numbers.count("6") == 1
+            assert answer_numbers.count("7") == 1
+            all_sources = all_experiments.json()["sources"]
+            cited_source_indices = {int(index) for index in re.findall(r"\[(\d+)\]", answer)}
+            assert all(source["document_id"] == experiment_document["id"] for source in all_sources)
+            assert all(source["filename"] == "experiments.docx" for source in all_sources)
+            assert all(source["chunk_index"] is not None for source in all_sources)
+            assert cited_source_indices
+            assert cited_source_indices <= {source["index"] for source in all_sources}
+            all_prompt = "\n".join(message["content"] for message in captured_prompts[-1])
+            assert "EXPERIMENT 6" in all_prompt and "EXPERIMENT 7" in all_prompt
+            assert "deduplicate repeated mentions" in all_prompt
+
+            experiment_seven = await client.post(
+                f"/api/v1/conversations/{conversation_id}/messages",
+                json={
+                    "message": "Tell me about EXPERIMENT 7.",
+                    "client_message_id": f"msg_{uuid4().hex}",
+                    "document_ids": [experiment_document["id"]],
+                },
+            )
+            assert experiment_seven.status_code == 200, experiment_seven.text
+            assert "7" in experiment_seven.json()["content"]
+            assert "6" not in experiment_seven.json()["content"]
+            assert experiment_seven.json()["sources"]
+            assert all(
+                source["document_id"] == experiment_document["id"]
+                for source in experiment_seven.json()["sources"]
+            )
+            specific_prompt = "\n".join(message["content"] for message in captured_prompts[-1])
+            assert "EXPERIMENT 7" in specific_prompt
+            assert "EXPERIMENT 6" not in specific_prompt
+
+            normal_fact = await client.post(
+                f"/api/v1/conversations/{conversation_id}/messages",
+                json={
+                    "message": "What is the project code?",
+                    "client_message_id": f"msg_{uuid4().hex}",
+                    "document_ids": [experiment_document["id"]],
+                },
+            )
+            assert normal_fact.status_code == 200, normal_fact.text
+            assert "violet 7314" in normal_fact.json()["content"].lower()
+            assert normal_fact.json()["sources"]
 
             unrelated = await client.post(
                 f"/api/v1/conversations/{conversation_id}/messages",
@@ -275,7 +365,7 @@ def test_live_workspace_chat_upload_ocr_and_rag(monkeypatch: pytest.MonkeyPatch)
 
             loaded = await client.get(f"/api/v1/conversations/{conversation_id}")
             assert loaded.status_code == 200
-            assert len(loaded.json()["messages"]) == 6
+            assert len(loaded.json()["messages"]) == 12
             other_owner = f"another-test-owner-{uuid4()}"
             app.dependency_overrides[get_email_verified_claims] = lambda: {
                 "sub": other_owner,
@@ -283,17 +373,67 @@ def test_live_workspace_chat_upload_ocr_and_rag(monkeypatch: pytest.MonkeyPatch)
             }
             assert (await client.get(f"/api/v1/conversations/{conversation_id}")).status_code == 404
             assert (await client.get(f"/api/v1/documents/{docx_doc['id']}")).status_code == 404
+            other_conversation = await client.post("/api/v1/conversations", json={"title": "Cross-user test"})
+            assert other_conversation.status_code == 201
+            cross_user_message = await client.post(
+                f"/api/v1/conversations/{other_conversation.json()['id']}/messages",
+                json={
+                    "message": "Read the other user's document.",
+                    "client_message_id": f"msg_{uuid4().hex}",
+                    "document_ids": [experiment_document["id"]],
+                },
+            )
+            assert cross_user_message.status_code == 404
+            assert (await client.delete(
+                f"/api/v1/conversations/{other_conversation.json()['id']}"
+            )).status_code == 204
 
             app.dependency_overrides[get_email_verified_claims] = lambda: {
                 "sub": owner_id,
                 "email_verified": True,
             }
+            renamed = await client.patch(
+                f"/api/v1/conversations/{conversation_id}", json={"title": "Renamed integration"}
+            )
+            assert renamed.status_code == 200, renamed.text
+            assert renamed.json()["title"] == "Renamed integration"
+            assert (await client.patch(
+                f"/api/v1/conversations/{conversation_id}", json={"title": "   "}
+            )).status_code == 422
+
+            delete_target = await client.post("/api/v1/conversations", json={"title": "Delete integration"})
+            assert delete_target.status_code == 201
+            delete_id = UUID(delete_target.json()["id"])
+            delete_message = await client.post(
+                f"/api/v1/conversations/{delete_id}/messages",
+                json={
+                    "message": "Reply briefly: what is 2 plus 2?",
+                    "client_message_id": f"msg_{uuid4().hex}",
+                    "document_ids": [],
+                },
+            )
+            assert delete_message.status_code == 200
+            app.dependency_overrides[get_email_verified_claims] = lambda: {
+                "sub": other_owner,
+                "email_verified": True,
+            }
+            assert (await client.delete(f"/api/v1/conversations/{delete_id}")).status_code == 404
+            app.dependency_overrides[get_email_verified_claims] = lambda: {
+                "sub": owner_id,
+                "email_verified": True,
+            }
+            assert (await client.delete(f"/api/v1/conversations/{delete_id}")).status_code == 204
+            assert (await client.get(f"/api/v1/conversations/{delete_id}")).status_code == 404
+            async with get_engine().connect() as connection:
+                remaining_messages = await connection.scalar(sql_text("""
+                    SELECT COUNT(*) FROM workspace_messages WHERE conversation_id=:id
+                """), {"id": delete_id})
+            assert remaining_messages == 0
+            assert (await client.get(f"/api/v1/documents/{experiment_document['id']}")).status_code == 200
             for item in documents:
                 assert (await client.delete(f"/api/v1/documents/{item['id']}" )).status_code == 204
-            async with get_engine().begin() as connection:
-                await connection.execute(sql_text(
-                    "DELETE FROM workspace_conversations WHERE id=:id AND owner_id=:owner_id"
-                ), {"id": UUID(conversation_id), "owner_id": owner_id})
+            assert (await client.delete(f"/api/v1/conversations/{conversation_id}")).status_code == 204
+            assert (await client.delete(f"/api/v1/conversations/{conversation_id}")).status_code == 404
             await client.aclose()
         asyncio.run(exercise())
     finally:

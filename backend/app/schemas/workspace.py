@@ -2,11 +2,23 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ConversationCreate(BaseModel):
     title: str = Field(default="New conversation", min_length=1, max_length=120)
+
+
+class ConversationRename(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+
+    @field_validator("title")
+    @classmethod
+    def title_must_not_be_blank(cls, value: str) -> str:
+        title = value.strip()
+        if not title:
+            raise ValueError("The conversation title cannot be blank.")
+        return title
 
 
 class MessageCreate(BaseModel):
@@ -20,6 +32,7 @@ class SourceReference(BaseModel):
     document_id: UUID
     filename: str
     page: int | None = None
+    chunk_index: int | None = None
 
 
 class MessageResponse(BaseModel):

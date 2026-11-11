@@ -24,7 +24,7 @@ type Conversation = {
   updated_at: string;
   last_message?: string | null;
 };
-type Source = { index: number; document_id: string; filename: string; page?: number | null };
+type Source = { index: number; document_id: string; filename: string; page?: number | null; chunk_index?: number | null };
 type Message = {
   id: string;
   role: "user" | "assistant";
@@ -92,6 +92,10 @@ export function Workspace() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set());
+  const [openConversationMenu, setOpenConversationMenu] = useState<string | null>(null);
+  const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
+  const [deletingConversation, setDeletingConversation] = useState<string | null>(null);
+  const [deleteConversationError, setDeleteConversationError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -109,7 +113,7 @@ export function Workspace() {
     setDocuments(await api<DocumentItem[]>("/api/v1/documents", token));
   }, [getAccessToken]);
 
-  const loadConversation = useCallback(async (id: string) => {
+  const loadConversation = useCallback(async (id: string): Promise<boolean> => {
     setError(null);
     try {
       const token = await getAccessToken();
@@ -117,8 +121,10 @@ export function Workspace() {
       setActiveConversation(id);
       setMessages(conversation.messages);
       setRetryMessage(null);
+      return true;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load this conversation.");
+      return false;
     }
   }, [getAccessToken]);
 
@@ -283,6 +289,57 @@ export function Workspace() {
     }
   }
 
+  async function renameConversation(conversation: Conversation) {
+    setOpenConversationMenu(null);
+    const proposed = window.prompt("Rename conversation", conversation.title);
+    if (proposed === null) return;
+    const title = proposed.trim();
+    if (!title) {
+      setError("Conversation titles cannot be blank.");
+      return;
+    }
+    try {
+      const token = await getAccessToken();
+      const renamed = await api<Conversation>(`/api/v1/conversations/${conversation.id}`, token, {
+        method: "PATCH",
+        body: JSON.stringify({ title }),
+      });
+      setConversations((current) => current.map((item) => item.id === renamed.id
+        ? { ...item, title: renamed.title, updated_at: renamed.updated_at } : item));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not rename the conversation.");
+    }
+  }
+
+  async function deleteConversation(conversation: Conversation) {
+    setDeletingConversation(conversation.id);
+    setDeleteConversationError(null);
+    try {
+      const token = await getAccessToken();
+      await api<void>(`/api/v1/conversations/${conversation.id}`, token, { method: "DELETE" });
+      const remaining = conversations.filter((item) => item.id !== conversation.id);
+      setConversations(remaining);
+      setConversationToDelete(null);
+      setOpenConversationMenu(null);
+      setError(null);
+      if (activeConversation === conversation.id) {
+        setActiveConversation(null);
+        setMessages([]);
+        setRetryMessage(null);
+        if (remaining[0]) {
+          const loaded = await loadConversation(remaining[0].id);
+          if (!loaded) await createConversation();
+        } else {
+          await createConversation();
+        }
+      }
+    } catch (caught) {
+      setDeleteConversationError(caught instanceof Error ? caught.message : "Could not delete the conversation. Please try again.");
+    } finally {
+      setDeletingConversation(null);
+    }
+  }
+
   return (
     <main className={styles.workspace} onDragEnter={(event) => { if (event.dataTransfer.types.includes("Files")) setDragging(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (event.currentTarget === event.target) setDragging(false); }} onDrop={onDrop}>
       <aside className={styles.sidebar}>
@@ -291,10 +348,30 @@ export function Workspace() {
         <div className={styles.sectionLabel}>CONVERSATIONS</div>
         <div className={styles.conversationList}>
           {conversations.map((conversation) => (
-            <button key={conversation.id} type="button" className={`${styles.conversationItem} ${activeConversation === conversation.id ? styles.activeConversation : ""}`} onClick={() => void loadConversation(conversation.id)}>
-              <span>{conversation.title || "New conversation"}</span>
-              {conversation.last_message && <small>{conversation.last_message}</small>}
-            </button>
+            <div key={conversation.id} className={`${styles.conversationItem} ${activeConversation === conversation.id ? styles.activeConversation : ""}`}>
+              <button type="button" className={styles.conversationOpen} onClick={() => { setOpenConversationMenu(null); void loadConversation(conversation.id); }}>
+                <span>{conversation.title || "New conversation"}</span>
+                {conversation.last_message && <small>{conversation.last_message}</small>}
+              </button>
+              <div className={styles.conversationActions}>
+                <button
+                  type="button"
+                  className={styles.conversationMenuButton}
+                  aria-label={`Actions for ${conversation.title || "New conversation"}`}
+                  aria-haspopup="menu"
+                  aria-expanded={openConversationMenu === conversation.id}
+                  onClick={() => setOpenConversationMenu((current) => current === conversation.id ? null : conversation.id)}
+                >···</button>
+                {openConversationMenu === conversation.id && (
+                  <div className={styles.conversationMenu} role="menu" onKeyDown={(event) => {
+                    if (event.key === "Escape") setOpenConversationMenu(null);
+                  }}>
+                    <button type="button" role="menuitem" onClick={() => void renameConversation(conversation)}>Rename</button>
+                    <button type="button" role="menuitem" onClick={() => { setOpenConversationMenu(null); setDeleteConversationError(null); setConversationToDelete(conversation); }}>Delete</button>
+                  </div>
+                )}
+              </div>
+            </div>
           ))}
           {!conversations.length && <p className={styles.muted}>Your chats will appear here.</p>}
         </div>
@@ -309,7 +386,7 @@ export function Workspace() {
             <article key={message.id} className={`${styles.message} ${message.role === "user" ? styles.userMessage : styles.assistantMessage}`}>
               <div className={styles.messageRole}>{message.role === "user" ? "You" : "Local AI"}</div>
               <div className={styles.messageText}>{message.content}</div>
-              {message.sources?.length ? <div className={styles.sources}>Sources: {message.sources.map((source) => <span key={`${source.document_id}-${source.index}`}>[{source.index}] {source.filename}{source.page ? ` · p. ${source.page}` : ""}</span>)}</div> : null}
+              {message.sources?.length ? <div className={styles.sources}>Sources: {message.sources.map((source) => <span key={`${source.document_id}-${source.index}`}>[{source.index}] {source.filename}{source.page ? ` · p. ${source.page}` : ""}{source.chunk_index != null ? ` · chunk ${source.chunk_index + 1}` : ""}</span>)}</div> : null}
             </article>
           ))}
           {sending && <div className={styles.thinking} role="status"><span className={styles.spinner} /> Thinking with your local model…</div>}
@@ -352,6 +429,35 @@ export function Workspace() {
         <p className={styles.privacyNote}>Files and embeddings stay in your local Docker volumes.</p>
       </aside>
       {dragging && <div className={styles.dragOverlay} onDragLeave={() => setDragging(false)}><div>Drop files to add them to your library</div></div>}
+      {conversationToDelete && (
+        <div className={styles.dialogBackdrop}>
+          <section
+            className={styles.deleteDialog}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-conversation-title"
+            aria-describedby="delete-conversation-description"
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && deletingConversation !== conversationToDelete.id) {
+                setConversationToDelete(null);
+                setDeleteConversationError(null);
+              }
+            }}
+          >
+            <h2 id="delete-conversation-title">Delete conversation?</h2>
+            <p id="delete-conversation-description">
+              Delete “{conversationToDelete.title || "New conversation"}” and its messages? Your documents and indexed content will remain.
+            </p>
+            {deleteConversationError && <p className={styles.dialogError} role="alert">{deleteConversationError}</p>}
+            <div className={styles.dialogActions}>
+              <button type="button" onClick={() => { setConversationToDelete(null); setDeleteConversationError(null); }} disabled={deletingConversation === conversationToDelete.id}>Cancel</button>
+              <button type="button" className={styles.confirmDelete} onClick={() => void deleteConversation(conversationToDelete)} disabled={deletingConversation === conversationToDelete.id}>
+                {deletingConversation === conversationToDelete.id ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
