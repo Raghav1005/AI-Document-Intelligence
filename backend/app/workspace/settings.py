@@ -12,6 +12,7 @@ class WorkspaceSettings(BaseSettings):
     embedding_model: str = Field(default="embeddinggemma:latest", validation_alias="OLLAMA_EMBEDDING_MODEL")
     max_file_bytes: int = 25 * 1024 * 1024
     embedding_dimensions: int = 768
+    retrieval_distance_threshold: float = Field(default=0.72, validation_alias="RAG_MAX_COSINE_DISTANCE")
 
 
 def get_settings() -> WorkspaceSettings:

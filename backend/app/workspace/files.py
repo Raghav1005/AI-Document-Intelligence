@@ -133,6 +133,10 @@ def _extract_text_sync(path: Path, content_type: str) -> list[tuple[int | None, 
 
 
 def split_chunks(text: str, *, chunk_size: int = 1200, overlap: int = 160) -> list[str]:
+    # PostgreSQL text columns reject NUL bytes. They can occur in otherwise
+    # readable DOCX extraction output and previously caused the whole document
+    # indexing transaction to fail.
+    text = text.replace("\x00", " ")
     cleaned = re.sub(r"[\t\r ]+", " ", text)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
     if not cleaned:

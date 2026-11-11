@@ -1,11 +1,13 @@
 """Ollama embedding and chat client."""
 
+import logging
 from typing import Any
 
 import httpx
 
 from app.workspace.settings import get_settings
 
+logger = logging.getLogger(__name__)
 
 class OllamaUnavailable(Exception):
     pass
@@ -25,6 +27,7 @@ async def embed(text_value: str) -> list[float]:
                 raise OllamaUnavailable("The embedding model returned an unexpected vector size.")
             return [float(value) for value in vector]
     except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
+        logger.exception("Ollama embedding request failed model=%s", settings.embedding_model)
         raise OllamaUnavailable("The local embedding model is unavailable.") from error
 
 
@@ -42,4 +45,5 @@ async def generate(messages: list[dict[str, str]]) -> str:
                 raise OllamaUnavailable("The local chat model returned an empty response.")
             return content.strip()
     except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
+        logger.exception("Ollama chat request failed model=%s", settings.chat_model)
         raise OllamaUnavailable("The local chat model is unavailable.") from error

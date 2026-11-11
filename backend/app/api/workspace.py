@@ -21,7 +21,7 @@ from app.schemas.workspace import (
 )
 from app.workspace.files import read_upload, save_file, storage_file
 from app.workspace.ollama import OllamaUnavailable
-from app.workspace.processing import answer_message
+from app.workspace.processing import DocumentRetrievalUnavailable, answer_message
 from app.workspace.store import WorkspaceStore
 
 router = APIRouter(prefix="/api/v1", tags=["workspace"])
@@ -86,6 +86,12 @@ async def create_message(
         )
     except OllamaUnavailable as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except LookupError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except DocumentRetrievalUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
     except SQLAlchemyError as error:
         raise HTTPException(status_code=503, detail="Chat storage is temporarily unavailable.") from error
     if result.get("error") == "conversation_not_found":
@@ -141,6 +147,19 @@ async def list_documents(claims: Claims, store: Store) -> list[dict]:
         return await store.list_documents(owner(claims))
     except SQLAlchemyError as error:
         raise HTTPException(status_code=503, detail="Document storage is temporarily unavailable.") from error
+
+
+@router.post("/documents/{document_id}/retry", response_model=DocumentResponse, status_code=status.HTTP_202_ACCEPTED)
+async def retry_document(document_id: UUID, claims: Claims, store: Store) -> dict:
+    try:
+        document = await store.retry_failed_document(owner(claims), document_id)
+    except SQLAlchemyError as error:
+        raise HTTPException(status_code=503, detail="Document storage is temporarily unavailable.") from error
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    if document["status"] != "pending":
+        raise HTTPException(status_code=409, detail="Only failed documents can be retried.")
+    return document
 
 
 @router.get("/documents/{document_id}", response_model=DocumentResponse)

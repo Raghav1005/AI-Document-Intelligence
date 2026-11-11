@@ -233,21 +233,51 @@ class WorkspaceStore:
                 WHERE id=:id AND status='processing'
             """), {"id": document_id, "message": message[:500]})
 
+    async def retry_failed_document(self, owner_id: str, document_id: UUID) -> dict | None:
+        """Queue only an owned document that is currently failed for reprocessing."""
+        await ensure_schema()
+        async with get_engine().begin() as connection:
+            row = (await connection.execute(text("""
+                UPDATE workspace_documents
+                SET status='pending', error_message=NULL, updated_at=NOW()
+                WHERE id=:id AND owner_id=:owner_id AND status='failed'
+                RETURNING id, filename, content_type, size_bytes, status, error_message, created_at, updated_at
+            """), {"id": document_id, "owner_id": owner_id})).mappings().first()
+        if row is not None:
+            return dict(row)
+        return await self.get_document(owner_id, document_id)
+
     async def retrieve_chunks(
-        self, *, owner_id: str, document_ids: list[UUID], embedding: list[float], limit: int = 4
+        self, *, owner_id: str, document_ids: list[UUID], embedding: list[float],
+        limit: int = 8, max_distance: float = 0.72,
     ) -> list[dict]:
         await ensure_schema()
         vector = "[" + ",".join(f"{value:.9g}" for value in embedding) + "]"
         async with get_engine().connect() as connection:
             rows = (await connection.execute(text("""
-                SELECT c.document_id, d.filename, c.page_number, c.content,
+                SELECT c.document_id, d.filename, c.page_number, c.chunk_index, c.content,
                        c.embedding <=> CAST(:embedding AS vector) AS distance
                 FROM workspace_chunks c
                 JOIN workspace_documents d ON d.id=c.document_id AND d.owner_id=c.owner_id
                 WHERE c.owner_id=:owner_id AND d.status='completed' AND c.document_id=ANY(:document_ids)
+                  AND c.embedding <=> CAST(:embedding AS vector) <= :max_distance
                 ORDER BY c.embedding <=> CAST(:embedding AS vector) LIMIT :limit
             """), {
                 "owner_id": owner_id, "document_ids": document_ids,
-                "embedding": vector, "limit": limit,
+                "embedding": vector, "limit": limit, "max_distance": max_distance,
             })).mappings().all()
-        return [dict(row) for row in rows if float(row["distance"]) <= 0.55]
+        return [dict(row) for row in rows]
+
+    async def validate_selected_documents(self, *, owner_id: str, document_ids: list[UUID]) -> list[str]:
+        """Verify every requested document belongs to the caller and is indexed."""
+        await ensure_schema()
+        async with get_engine().connect() as connection:
+            rows = (await connection.execute(text("""
+                SELECT id, status FROM workspace_documents
+                WHERE owner_id=:owner_id AND id=ANY(:document_ids)
+            """), {"owner_id": owner_id, "document_ids": document_ids})).all()
+        statuses = {row.id: row.status for row in rows}
+        if len(statuses) != len(set(document_ids)):
+            raise PermissionError("One or more selected documents are unavailable.")
+        unavailable = [status for status in statuses.values() if status != "completed"]
+        return unavailable

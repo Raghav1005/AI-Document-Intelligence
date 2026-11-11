@@ -96,10 +96,11 @@ export function Workspace() {
   const [sending, setSending] = useState(false);
   const [creating, setCreating] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [retryingDocument, setRetryingDocument] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [retryMessage, setRetryMessage] = useState<{ text: string; id: string } | null>(null);
+  const [retryMessage, setRetryMessage] = useState<{ text: string; id: string; documentIds: string[] } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const chatEnd = useRef<HTMLDivElement>(null);
 
@@ -178,11 +179,11 @@ export function Workspace() {
 
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, sending]);
 
-  async function sendMessage(text: string, clientId = crypto.randomUUID()) {
+  async function sendMessage(text: string, clientId = crypto.randomUUID(), documentIds = [...selectedDocuments]) {
     if (!activeConversation || !text.trim() || sending) return;
     setSending(true);
     setError(null);
-    setRetryMessage({ text, id: clientId });
+    setRetryMessage({ text, id: clientId, documentIds });
     if (!messages.some((message) => message.id === clientId)) {
       setMessages((current) => [...current, { id: clientId, role: "user", content: text }]);
     }
@@ -190,11 +191,12 @@ export function Workspace() {
       const token = await getAccessToken();
       const response = await api<Message>(`/api/v1/conversations/${activeConversation}/messages`, token, {
         method: "POST",
-        body: JSON.stringify({ message: text, client_message_id: clientId, document_ids: [...selectedDocuments] }),
+        body: JSON.stringify({ message: text, client_message_id: clientId, document_ids: documentIds }),
       });
       setMessages((current) => [...current, response]);
+      const title = text.slice(0, 72).trim() || "New conversation";
       setConversations((current) => current.map((item) => item.id === activeConversation
-        ? { ...item, last_message: text, updated_at: new Date().toISOString() } : item));
+        ? { ...item, title: item.title === "New conversation" ? title : item.title, last_message: text, updated_at: new Date().toISOString() } : item));
       setRetryMessage(null);
       setDraft("");
     } catch (caught) {
@@ -268,6 +270,18 @@ export function Workspace() {
       setError(caught instanceof Error ? caught.message : "Could not delete the document.");
     }
   }
+  async function retryDocument(document: DocumentItem) {
+    setRetryingDocument(document.id);
+    try {
+      const token = await getAccessToken();
+      const retried = await api<DocumentItem>(`/api/v1/documents/${document.id}/retry`, token, { method: "POST" });
+      setDocuments((current) => current.map((item) => item.id === retried.id ? retried : item));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not retry document processing.");
+    } finally {
+      setRetryingDocument(null);
+    }
+  }
 
   return (
     <main className={styles.workspace} onDragEnter={(event) => { if (event.dataTransfer.types.includes("Files")) setDragging(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (event.currentTarget === event.target) setDragging(false); }} onDrop={onDrop}>
@@ -301,7 +315,7 @@ export function Workspace() {
           {sending && <div className={styles.thinking} role="status"><span className={styles.spinner} /> Thinking with your local model…</div>}
           <div ref={chatEnd} />
         </div>
-        {error && <div className={styles.errorBanner} role="alert"><span>{error}</span>{retryMessage && !sending && <button type="button" onClick={() => void sendMessage(retryMessage.text, retryMessage.id)}>Retry response</button>}<button aria-label="Dismiss error" onClick={() => setError(null)}>×</button></div>}
+        {error && <div className={styles.errorBanner} role="alert"><span>{error}</span>{retryMessage && !sending && <button type="button" onClick={() => void sendMessage(retryMessage.text, retryMessage.id, retryMessage.documentIds)}>Retry response</button>}<button aria-label="Dismiss error" onClick={() => setError(null)}>×</button></div>}
         <div className={styles.composerWrap}>
           {selectedDocuments.size > 0 && <div className={styles.selectionNote}>Using {selectedDocuments.size} selected {selectedDocuments.size === 1 ? "document" : "documents"}</div>}
           <form className={styles.composer} onSubmit={onSubmit}>
@@ -330,6 +344,7 @@ export function Workspace() {
               </label>
               <button type="button" className={styles.deleteButton} aria-label={`Delete ${document.filename}`} onClick={() => void removeDocument(document)}>×</button>
               {document.status === "failed" && document.error_message && <p className={styles.documentError}>{document.error_message}</p>}
+              {document.status === "failed" && <button type="button" className={styles.retryDocument} disabled={retryingDocument === document.id} onClick={() => void retryDocument(document)}>{retryingDocument === document.id ? "Retrying…" : "Retry indexing"}</button>}
             </div>
           ))}
           {!documents.length && <p className={styles.muted}>Upload a file to start building your private library.</p>}

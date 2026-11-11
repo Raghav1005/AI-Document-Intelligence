@@ -94,6 +94,13 @@ def test_chunks_preserve_content_with_bounded_overlap() -> None:
     assert "violet 7314" in " ".join(chunks)
 
 
+def test_chunks_remove_nul_bytes_from_extracted_docx_text() -> None:
+    chunks = split_chunks("Experiment number\x0042 was performed.")
+    assert len(chunks) == 1
+    assert "\x00" not in chunks[0]
+    assert "42" in chunks[0]
+
+
 def test_workspace_endpoints_reject_unauthenticated_requests() -> None:
     with TestClient(app) as client:
         assert client.get("/api/v1/conversations").status_code == 401
@@ -140,7 +147,10 @@ def test_live_workspace_chat_upload_ocr_and_rag(monkeypatch: pytest.MonkeyPatch)
             assert repeated.status_code == 200
             assert repeated.json()["id"] == first_message.json()["id"]
 
-            text = "The project code is violet 7314. This file is for local retrieval testing."
+            text = (
+                "Experiment number: 7314. This experiment evaluates supervised learning models "
+                "on the CIFAR dataset. The document is for local retrieval testing."
+            )
             uploads = [
                 ("files", ("notes.txt", text.encode(), "text/plain")),
                 ("files", ("notes.docx", text_docx(text), "application/octet-stream")),
@@ -180,18 +190,69 @@ def test_live_workspace_chat_upload_ocr_and_rag(monkeypatch: pytest.MonkeyPatch)
                 """), {"id": UUID(scanned_image["id"]), "owner_id": owner_id})).scalars().all()
             assert any("OCR SAMPLE" in chunk.upper() for chunk in ocr_chunks)
 
-            txt_doc = next(item for item in documents if item["filename"] == "notes.txt")
+            docx_doc = next(item for item in documents if item["filename"] == "notes.docx")
+            async with get_engine().connect() as connection:
+                indexed_chunks = (await connection.execute(sql_text("""
+                    SELECT content, vector_dims(embedding) AS embedding_dimensions
+                    FROM workspace_chunks WHERE document_id=:id AND owner_id=:owner_id
+                """), {"id": UUID(docx_doc["id"]), "owner_id": owner_id})).mappings().all()
+            assert indexed_chunks
+            assert all(row["embedding_dimensions"] == 768 for row in indexed_chunks)
+            assert "7314" in " ".join(row["content"] for row in indexed_chunks)
+
+            from app.workspace import processing as processing_module
+
+            original_generate = processing_module.generate
+            captured_prompts: list[list[dict[str, str]]] = []
+
+            async def capture_generate(messages: list[dict[str, str]]) -> str:
+                captured_prompts.append(messages)
+                return await original_generate(messages)
+
+            monkeypatch.setattr(processing_module, "generate", capture_generate)
             rag_message = await client.post(
                 f"/api/v1/conversations/{conversation_id}/messages",
                 json={
-                    "message": "What is the project code?",
+                    "message": "What is the experiment number in the selected document?",
                     "client_message_id": f"msg_{uuid4().hex}",
-                    "document_ids": [txt_doc["id"]],
+                    "document_ids": [docx_doc["id"]],
                 },
             )
             assert rag_message.status_code == 200, rag_message.text
-            assert "violet" in rag_message.json()["content"].lower() or rag_message.json()["sources"]
-            assert rag_message.json()["sources"][0]["filename"] == "notes.txt"
+            assert "7314" in rag_message.json()["content"]
+            assert rag_message.json()["sources"]
+            assert rag_message.json()["sources"][0]["filename"] == "notes.docx"
+            assert captured_prompts
+            prompt_text = "\n".join(message["content"] for message in captured_prompts[-1])
+            assert "Experiment number: 7314" in prompt_text
+            assert "[Source 1: notes.docx" in prompt_text
+
+            unrelated = await client.post(
+                f"/api/v1/conversations/{conversation_id}/messages",
+                json={
+                    "message": "What is the patient's blood type?",
+                    "client_message_id": f"msg_{uuid4().hex}",
+                    "document_ids": [docx_doc["id"]],
+                },
+            )
+            assert unrelated.status_code == 200, unrelated.text
+            assert unrelated.json()["sources"] == []
+            assert "7314" not in unrelated.json()["content"]
+            unrelated_prompt = "\n".join(message["content"] for message in captured_prompts[-1])
+            assert "no relevant excerpts were found" in unrelated_prompt
+
+            broken_doc = next(item for item in documents if item["filename"] == "broken.pdf")
+            retry = await client.post(f"/api/v1/documents/{broken_doc['id']}/retry")
+            assert retry.status_code == 202, retry.text
+            assert retry.json()["status"] == "pending"
+            retry_deadline = time.monotonic() + 60
+            while time.monotonic() < retry_deadline:
+                current = await client.get(f"/api/v1/documents/{broken_doc['id']}")
+                assert current.status_code == 200
+                if current.json()["status"] == "failed":
+                    break
+                await asyncio.sleep(1)
+            assert current.json()["status"] == "failed"
 
             async def unavailable(_messages):
                 raise OllamaUnavailable("test model unavailable")
@@ -214,14 +275,14 @@ def test_live_workspace_chat_upload_ocr_and_rag(monkeypatch: pytest.MonkeyPatch)
 
             loaded = await client.get(f"/api/v1/conversations/{conversation_id}")
             assert loaded.status_code == 200
-            assert len(loaded.json()["messages"]) == 4
+            assert len(loaded.json()["messages"]) == 6
             other_owner = f"another-test-owner-{uuid4()}"
             app.dependency_overrides[get_email_verified_claims] = lambda: {
                 "sub": other_owner,
                 "email_verified": True,
             }
             assert (await client.get(f"/api/v1/conversations/{conversation_id}")).status_code == 404
-            assert (await client.get(f"/api/v1/documents/{txt_doc['id']}")).status_code == 404
+            assert (await client.get(f"/api/v1/documents/{docx_doc['id']}")).status_code == 404
 
             app.dependency_overrides[get_email_verified_claims] = lambda: {
                 "sub": owner_id,
