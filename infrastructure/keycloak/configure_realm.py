@@ -179,8 +179,8 @@ def configure() -> None:
     smtp = {
         "host": os.getenv("SMTP_HOST", "mailpit"),
         "port": os.getenv("SMTP_PORT", "1025"),
-        "from": os.getenv("SMTP_FROM", "no-reply@local-ai.local"),
-        "fromDisplayName": "Local AI Platform",
+        "from": os.getenv("SMTP_FROM_EMAIL", os.getenv("SMTP_FROM", "no-reply@local-ai.local")),
+        "fromDisplayName": os.getenv("SMTP_FROM_NAME", "Local AI"),
         "ssl": os.getenv("SMTP_USE_SSL", "false").lower(),
         "starttls": os.getenv("SMTP_USE_TLS", "false").lower(),
         "auth": "true" if smtp_username else "false",
@@ -276,7 +276,8 @@ def verify() -> None:
     expected_smtp = {
         "host": os.getenv("SMTP_HOST", "mailpit"),
         "port": os.getenv("SMTP_PORT", "1025"),
-        "from": os.getenv("SMTP_FROM", "no-reply@local-ai.local"),
+        "from": os.getenv("SMTP_FROM_EMAIL", os.getenv("SMTP_FROM", "no-reply@local-ai.local")),
+        "fromDisplayName": os.getenv("SMTP_FROM_NAME", "Local AI"),
         "ssl": os.getenv("SMTP_USE_SSL", "false").lower(),
         "starttls": os.getenv("SMTP_USE_TLS", "false").lower(),
         "auth": "true" if expected_smtp_username else "false",

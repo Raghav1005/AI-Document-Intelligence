@@ -276,6 +276,21 @@ async def test_mail_delivery_failure_does_not_leave_pending_registration(harness
     assert exists is False
 
 
+async def test_resend_delivery_failure_preserves_the_current_code(harness: Harness):
+    registration_id, original_otp = await register(harness, uuid4().hex)
+    async with harness.store.engine.begin() as connection:
+        await connection.execute(text(
+            "UPDATE pending_registrations SET resend_available_at = NOW() - INTERVAL '1 second' WHERE id = :id"
+        ), {"id": registration_id})
+    harness.mailer.fail = True
+    await expect_http(503, harness.service.resend(registration_id, f"ip-{uuid4()}"))
+    assert await _pending_exists(harness, registration_id)
+    harness.mailer.fail = False
+    assert (await harness.service.verify(
+        registration_id, original_otp, f"ip-{uuid4()}"
+    ))["status"] == "verified"
+
+
 async def test_mismatched_password_confirmation_is_invalid():
     with pytest.raises(ValueError, match="Passwords do not match"):
         RegistrationRequest(

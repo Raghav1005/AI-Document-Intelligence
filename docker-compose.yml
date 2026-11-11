@@ -42,6 +42,8 @@ services:
     environment:
       APP_DATABASE_URL: postgresql+asyncpg://${POSTGRES_APP_USER:?Set POSTGRES_APP_USER in .env}:${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}@app-db:5432/${POSTGRES_APP_DB:?Set POSTGRES_APP_DB in .env}
       VECTOR_DATABASE_URL: postgresql+asyncpg://${POSTGRES_VECTOR_USER:?Set POSTGRES_VECTOR_USER in .env}:${POSTGRES_VECTOR_PASSWORD:?Set POSTGRES_VECTOR_PASSWORD in .env}@vector-db:5432/${POSTGRES_VECTOR_DB:?Set POSTGRES_VECTOR_DB in .env}
+      WORKSPACE_DATABASE_URL: postgresql+asyncpg://${POSTGRES_VECTOR_USER:?Set POSTGRES_VECTOR_USER in .env}:${POSTGRES_VECTOR_PASSWORD:?Set POSTGRES_VECTOR_PASSWORD in .env}@vector-db:5432/${POSTGRES_VECTOR_DB:?Set POSTGRES_VECTOR_DB in .env}
+      DOCUMENT_STORAGE_PATH: /data/documents
       KEYCLOAK_ISSUER: http://localhost:${KEYCLOAK_PORT:-8080}/realms/${KEYCLOAK_REALM:-local-ai}
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-local-ai}
@@ -50,13 +52,15 @@ services:
       KEYCLOAK_REGISTRATION_CLIENT_ID: local-ai-registration
       KEYCLOAK_REGISTRATION_CLIENT_SECRET_FILE: /run/secrets/registration/keycloak-client-secret
       REGISTRATION_KEY_DIR: /run/secrets/registration
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-mailpit}
       SMTP_HOST: ${SMTP_HOST:-mailpit}
       SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
       SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
-      SMTP_FROM: ${SMTP_FROM:-no-reply@local-ai.local}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-no-reply@local-ai.local}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Local AI}
       CORS_ORIGINS: http://localhost:3000
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen2.5:3b-instruct-q4_K_M}
@@ -79,6 +83,7 @@ services:
       - smtp
     volumes:
       - registration-secrets:/run/secrets/registration
+      - workspace-documents:/data/documents
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
       interval: 15s
@@ -159,6 +164,34 @@ services:
       retries: 5
       start_period: 5s
 
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker"]
+    environment:
+      WORKSPACE_DATABASE_URL: postgresql+asyncpg://${POSTGRES_VECTOR_USER:?Set POSTGRES_VECTOR_USER in .env}:${POSTGRES_VECTOR_PASSWORD:?Set POSTGRES_VECTOR_PASSWORD in .env}@vector-db:5432/${POSTGRES_VECTOR_DB:?Set POSTGRES_VECTOR_DB in .env}
+      DOCUMENT_STORAGE_PATH: /data/documents
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen2.5:3b-instruct-q4_K_M}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-embeddinggemma:latest}
+    depends_on:
+      vector-db:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    networks:
+      - api-data
+    volumes:
+      - workspace-documents:/data/documents
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; os.kill(1, 0)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.8.2
     restart: unless-stopped
@@ -213,7 +246,8 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
       SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
-      SMTP_FROM: ${SMTP_FROM:-no-reply@local-ai.local}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-no-reply@local-ai.local}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Local AI}
     volumes:
       - ./infrastructure/keycloak/configure_realm.py:/scripts/configure_realm.py:ro
       - registration-secrets:/run/secrets/registration
@@ -261,4 +295,5 @@ volumes:
   vector-db-data:
   keycloak-db-data:
   registration-secrets:
+  workspace-documents:
   ollama-data:

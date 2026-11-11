@@ -4,7 +4,7 @@ A locally hosted document processing and retrieval-augmented chat platform. The 
 
 ## Current status
 
-The repository contains the infrastructure foundation, a protected Next.js workspace shell, Keycloak browser authentication with PKCE S256, custom four-digit email OTP registration, backend email-verification enforcement, and local SMTP capture. Application persistence, document processing, and chat remain planned feature work.
+The repository contains an authenticated Next.js workspace with persistent conversations, local Ollama chat and RAG, secure document upload, a durable background processing worker, local OCR and pgvector storage, Keycloak authentication with PKCE S256, four-digit email OTP registration, and backend verified-email enforcement. SMTP is configurable for local Mailpit or a real provider; external email delivery still requires production provider credentials and domain setup.
 
 ## Prerequisites
 
@@ -12,7 +12,7 @@ The repository contains the infrastructure foundation, a protected Next.js works
 - Enough disk space for persistent databases and local model weights
 - A machine with a local CPU; GPU support is optional and will be configured separately if available
 
-The initial model settings are placeholders for later backend integration. Hardware performance has not yet been measured.
+Hardware performance depends on the local CPU/GPU and document size; it has not yet been benchmarked on the target PC.
 
 ## Start the infrastructure
 
@@ -46,6 +46,14 @@ docker compose --env-file .env exec ollama ollama list
 
 The model weights are stored in the `ollama-data` volume. Downloads need network access and disk space; subsequent inference uses the local runtime. These candidate models have not been benchmarked on the target PC.
 
+## Use the workspace
+
+After signing in with a verified account, create conversations and ask questions in the workspace. Upload PDF, DOCX, TXT, PNG, or JPG files using the picker or drag and drop (up to 25 MB per file). The background `worker` extracts text, applies local Tesseract OCR to images and scanned PDF pages, creates embeddings with `embeddinggemma:latest`, and stores searchable chunks in pgvector. Select completed documents before asking a document question; answers include source references when relevant passages are retrieved. Chat without selected documents uses the local chat model normally.
+
+The authenticated API is under `/api/v1`: conversations support create/list/load and message submission; documents support upload/list/load/status/delete. Health endpoints are public. Conversation and document records are scoped to the verified Keycloak subject. The worker and API share the `workspace-documents` Docker volume and pgvector database; processing state is persisted in PostgreSQL so pending work can resume after a worker restart.
+
+For development, use Mailpit at [http://localhost:8025](http://localhost:8025) to inspect OTP messages. For real delivery, configure `EMAIL_PROVIDER=smtp`, SMTP host/port, sender, TLS mode, username, and password in the backend/Keycloak deployment environment. Do not set these in frontend variables. See [authentication.md](docs/technical-decisions/authentication.md) for Resend/Brevo examples and sender-domain setup.
+
 ## Persistent data
 
 Named volumes retain application database data, vector data, Keycloak data, registration encryption keys and client credentials, and Ollama model files. `docker compose down` stops and removes containers but keeps these volumes. Removing volumes destroys local data, registration secrets, and model downloads. Back up the `registration-secrets` volume together with the application database; its key encrypts pending registration passwords.
@@ -62,11 +70,12 @@ Named volumes retain application database data, vector data, Keycloak data, regi
 | `mailpit` | Development SMTP capture and inbox | `localhost:1025`, `localhost:8025` |
 | `ollama` | Local model runtime | `localhost:11434` |
 | `backend` | FastAPI health/API process | `localhost:8000` |
+| `worker` | Durable OCR, embedding, and document indexing process | Internal only |
 | `frontend` | Next.js workspace UI and Keycloak public client | `localhost:3000` |
 
-## Checks available at this stage
+## Checks
 
-From the repository root, validate the Compose file with `docker compose --env-file .env.example config --quiet`. From `frontend/`, run `npm run typecheck`, `npm run lint`, and `npm run build`. From `backend/`, run `python -m pytest -p no:cacheprovider tests/`. Auth tests use a generated RSA key and do not contact a live Keycloak instance.
+From the repository root, validate the Compose file with `docker compose config --quiet`. From `frontend/`, run `npm run typecheck`, `npm run lint`, and `npm run build`. Backend unit tests run from `backend/` with `python -m pytest -p no:cacheprovider tests/`. Workspace tests require the local PostgreSQL, pgvector, Ollama, and worker services. Registration persistence tests require a PostgreSQL test database. The test suite includes live integration cases for normal Ollama chat, file extraction, OCR, embeddings, vector retrieval, RAG, idempotent messages, user isolation, and safe failure handling.
 
 ## Design notes
 
@@ -76,7 +85,6 @@ From the repository root, validate the Compose file with `docker compose --env-f
 - The backend provisions users through the confidential `local-ai-registration` service account. It receives only Keycloak `manage-users` and `query-users` client roles; no client secret or administrative credential is sent to browser code.
 - Application and vector data are separate from Keycloak identity data.
 - Local inference will not send documents or conversations to external AI APIs.
-- Numeric email OTP may require a custom Keycloak extension; the default verification-link flow is not equivalent to a code-based OTP.
 - Full architecture and known limitations are documented in `docs/ARCHITECTURE_DECISIONS.md` and `docs/LIMITATIONS_AND_TRADEOFFS.md`.
 
 ## Planned feature sequence

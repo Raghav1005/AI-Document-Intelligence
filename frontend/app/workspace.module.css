@@ -1,0 +1,76 @@
+.workspace { display: grid; grid-template-columns: 250px minmax(360px, 1fr) 310px; width: 100%; min-height: 100vh; background: #fbfcfa; color: #293831; }
+.sidebar { display: flex; flex-direction: column; min-width: 0; padding: 23px 14px 14px; border-right: 1px solid #e6e9e4; background: #f3f4f1; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 7px; color: #202a25; font-size: 14px; font-weight: 650; }
+.brandMark { display: grid; width: 29px; height: 29px; place-items: center; border-radius: 9px; background: #1f4338; color: #e9f5e9; font-family: Georgia, serif; font-size: 17px; }
+.newButton { display: flex; align-items: center; gap: 8px; min-height: 40px; margin: 27px 0 24px; padding: 0 12px; border: 1px solid #dce2db; border-radius: 9px; background: #fff; color: #354b3e; font: inherit; font-size: 11px; font-weight: 600; text-align: left; cursor: pointer; }
+.newButton:disabled { opacity: .6; cursor: wait; }
+.sectionLabel { color: #8b958e; font-size: 9px; font-weight: 700; letter-spacing: 1.15px; }
+.conversationList { display: grid; align-content: start; gap: 4px; overflow: auto; padding-top: 9px; }
+.conversationItem { display: grid; gap: 4px; width: 100%; padding: 10px; border: 0; border-radius: 8px; background: transparent; color: #435149; font: inherit; font-size: 11px; text-align: left; cursor: pointer; }
+.conversationItem > span, .conversationItem small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conversationItem small { color: #929b94; font-size: 9px; }
+.conversationItem:hover, .activeConversation { background: #e8ece6; }
+.muted { margin: 13px 7px; color: #9aa29c; font-size: 10px; line-height: 1.6; }
+.sidebarFooter { display: flex; align-items: center; gap: 8px; margin-top: auto; padding: 13px 5px 2px; border-top: 1px solid #e0e4de; color: #56655a; font-size: 10px; }
+.sidebarFooter > span:nth-child(2) { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebarFooter button { padding: 5px; border: 0; background: transparent; color: #59725f; font: inherit; cursor: pointer; }
+.avatar { display: grid; flex: 0 0 27px; width: 27px; height: 27px; place-items: center; border-radius: 50%; background: #dce8dd; color: #345844; font-size: 10px; font-weight: 700; }
+.mainPane { display: flex; min-width: 0; min-height: 100vh; flex-direction: column; }
+.header { display: flex; height: 58px; flex: 0 0 58px; align-items: center; justify-content: space-between; gap: 10px; padding: 0 22px; border-bottom: 1px solid #e9ece7; color: #758078; font-size: 10px; }
+.header strong { overflow: hidden; color: #45544b; font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.breadcrumb, .separator { margin-right: 8px; color: #8e9890; }
+.localBadge { flex: 0 0 auto; color: #64826a; font-size: 9px; }
+.chat { display: flex; flex: 1; flex-direction: column; gap: 20px; overflow: auto; padding: 38px clamp(20px, 5vw, 76px) 24px; }
+.emptyState { display: flex; min-height: 340px; flex: 1; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.sparkle { display: grid; width: 42px; height: 42px; place-items: center; margin-bottom: 18px; border: 1px solid #dce7dc; border-radius: 14px; background: #f0f5ef; color: #53715b; font-size: 19px; }
+.emptyState h1 { margin: 0; color: #26372e; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(25px, 3vw, 35px); font-weight: 400; letter-spacing: -.7px; }
+.emptyState p { max-width: 450px; margin: 13px 0 0; color: #828c84; font-size: 11px; line-height: 1.7; }
+.message { max-width: 840px; width: 100%; align-self: center; }
+.userMessage { padding: 14px 17px; border: 1px solid #e7ebe4; border-radius: 12px; background: #f5f7f3; }
+.messageRole { margin-bottom: 8px; color: #728278; font-size: 9px; font-weight: 700; letter-spacing: .5px; }
+.messageText { color: #36443b; font-size: 12px; line-height: 1.75; overflow-wrap: anywhere; white-space: pre-wrap; }
+.assistantMessage .messageText { color: #33433a; }
+.sources { display: flex; flex-wrap: wrap; gap: 6px 13px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #e8ece6; color: #728379; font-size: 9px; }
+.thinking { display: flex; align-items: center; gap: 9px; align-self: center; width: 100%; max-width: 840px; color: #77867b; font-size: 10px; }
+.spinner { width: 13px; height: 13px; border: 2px solid #e1e9e0; border-top-color: #62806a; border-radius: 50%; animation: rotate .75s linear infinite; }
+@keyframes rotate { to { transform: rotate(360deg); } }
+.errorBanner { display: flex; align-items: center; gap: 12px; margin: 0 clamp(20px, 5vw, 76px) 10px; padding: 10px 12px; border: 1px solid #efd8d4; border-radius: 8px; background: #fff7f5; color: #9a4b40; font-size: 10px; line-height: 1.5; }
+.errorBanner > span { flex: 1; }
+.errorBanner button { border: 0; background: transparent; color: #8d4b43; font: inherit; text-decoration: underline; cursor: pointer; }
+.composerWrap { padding: 10px clamp(18px, 5vw, 74px) 15px; }
+.selectionNote { margin-bottom: 7px; color: #6f806f; font-size: 9px; }
+.composer { display: flex; align-items: flex-end; gap: 9px; padding: 8px 9px; border: 1px solid #dfe5dd; border-radius: 13px; background: #fff; box-shadow: 0 4px 15px rgba(44, 61, 48, .035); }
+.composer textarea { width: 100%; max-height: 180px; min-height: 38px; resize: vertical; padding: 10px 2px; border: 0; outline: 0; background: transparent; color: #334239; font: inherit; font-size: 11px; line-height: 1.5; }
+.composer textarea::placeholder { color: #9ca59d; }
+.attachButton, .sendButton { display: grid; flex: 0 0 35px; width: 35px; height: 35px; place-items: center; border: 0; border-radius: 9px; cursor: pointer; }
+.attachButton { background: #f0f3ef; color: #607364; font-size: 19px; }
+.sendButton { background: #294d3e; color: white; font-size: 18px; }
+.sendButton:disabled { background: #e6eae5; color: #98a198; cursor: default; }
+.hiddenInput { display: none; }
+.composerHint { margin: 7px 0 0; color: #a0a8a1; font-size: 8px; text-align: center; }
+.documentsPane { display: flex; min-width: 0; flex-direction: column; padding: 23px 15px 15px; border-left: 1px solid #e7eae5; background: #fff; }
+.documentHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 17px; }
+.documentHeader h2 { margin: 5px 0 0; color: #34443a; font-size: 15px; font-weight: 600; }
+.documentHeader button { width: 30px; height: 30px; border: 1px solid #e0e6de; border-radius: 8px; background: #f7f9f6; color: #54705a; font-size: 17px; cursor: pointer; }
+.dropZone { display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 116px; padding: 14px 9px; border: 1px dashed #cdd8cb; border-radius: 10px; background: #f9fbf8; color: #637366; cursor: pointer; }
+.dropZone > span:first-child { font-size: 21px; }
+.dropZone strong { color: #47604c; font-size: 10px; font-weight: 650; }
+.dropZone small { color: #909a92; font-size: 8px; }
+.progressTrack { width: 90%; height: 4px; overflow: hidden; border-radius: 8px; background: #e4eae2; }
+.progressTrack span { display: block; height: 100%; border-radius: inherit; background: #62806a; transition: width .1s linear; }
+.documentList { display: grid; align-content: start; gap: 5px; overflow-y: auto; margin-top: 17px; }
+.documentItem { position: relative; padding: 9px 5px; border-bottom: 1px solid #eef0ec; }
+.documentSelect { display: flex; align-items: center; gap: 8px; padding-right: 18px; cursor: pointer; }
+.documentSelect input { accent-color: #476b54; }
+.documentSelect input:disabled { opacity: .5; }
+.fileIcon { display: grid; flex: 0 0 29px; height: 32px; place-items: center; border-radius: 7px; background: #f0f3ef; color: #647468; font-size: 7px; font-weight: 700; }
+.fileInfo { display: grid; min-width: 0; gap: 4px; }
+.fileInfo strong { overflow: hidden; color: #4a594f; font-size: 9px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.fileInfo small { color: #929b93; font-size: 8px; }
+.deleteButton { position: absolute; top: 12px; right: 0; border: 0; background: transparent; color: #9ca49d; font-size: 15px; cursor: pointer; }
+.documentError { margin: 6px 4px 0; color: #aa5a4e; font-size: 8px; line-height: 1.5; }
+.privacyNote { margin-top: auto; padding-top: 14px; color: #a1a9a2; font-size: 8px; line-height: 1.5; }
+.dragOverlay { position: fixed; z-index: 5; inset: 12px; display: grid; place-items: center; border: 2px dashed #6a9271; border-radius: 18px; background: rgba(238, 245, 237, .93); pointer-events: none; }
+.dragOverlay div { padding: 20px; color: #355b40; font-family: Georgia, serif; font-size: 25px; }
+@media (max-width: 1080px) { .workspace { grid-template-columns: 220px minmax(340px, 1fr); } .documentsPane { grid-column: 1 / -1; display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 0 16px; border-top: 1px solid #e7eae5; border-left: 0; } .documentHeader { grid-column: 1; } .dropZone { grid-column: 1; } .documentList { grid-column: 2; grid-row: 1 / span 2; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0; } .privacyNote { display: none; } }
+@media (max-width: 680px) { .workspace { display: flex; flex-direction: column; } .sidebar { min-height: 58px; flex-direction: row; align-items: center; gap: 9px; padding: 9px 11px; border-right: 0; border-bottom: 1px solid #e6e9e4; } .brand { flex: 0 0 auto; } .newButton { margin: 0; min-height: 34px; padding: 0 9px; font-size: 9px; } .sectionLabel, .conversationList { display: none; } .sidebarFooter { justify-content: flex-end; gap: 5px; margin: 0 0 0 auto; padding: 0; border: 0; } .sidebarFooter .avatar { width: 23px; height: 23px; flex-basis: 23px; } .sidebarFooter > span:nth-child(2) { max-width: 73px; font-size: 8px; } .sidebarFooter button { font-size: 8px; } .mainPane { min-height: 67vh; flex: 1; } .header { padding: 0 13px; } .chat { min-height: 300px; padding: 22px 14px; } .emptyState { min-height: 240px; } .emptyState h1 { font-size: 27px; } .emptyState p { font-size: 10px; } .composerWrap { padding: 10px 12px 13px; } .documentsPane { display: block; padding: 17px 13px 12px; border-top: 1px solid #e7eae5; } .documentHeader { margin-bottom: 10px; } .dropZone { min-height: 80px; } .documentList { grid-template-columns: 1fr; max-height: 230px; } .privacyNote { display: block; } }

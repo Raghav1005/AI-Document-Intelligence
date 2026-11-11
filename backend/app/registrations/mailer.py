@@ -1,11 +1,15 @@
 """SMTP delivery for registration verification codes."""
 
 import asyncio
+import logging
 from email.message import EmailMessage
+from email.utils import formataddr
 from html import escape
-from smtplib import SMTP, SMTPException, SMTP_SSL
+from smtplib import SMTP, SMTPException, SMTPRecipientsRefused, SMTP_SSL
 
 from app.registrations.settings import RegistrationSettings
+
+logger = logging.getLogger(__name__)
 
 
 class EmailDeliveryError(Exception):
@@ -19,7 +23,9 @@ class RegistrationMailer:
     async def send_otp(self, recipient: str, first_name: str, otp: str) -> None:
         message = EmailMessage()
         message["Subject"] = "Your Local AI verification code"
-        message["From"] = f"Local AI Platform <{self.settings.smtp_from}>"
+        message["From"] = formataddr(
+            (self.settings.smtp_from_name, self.settings.smtp_from_email)
+        )
         message["To"] = recipient
         name = escape(first_name)
         message.set_content(
@@ -42,12 +48,14 @@ class RegistrationMailer:
 
         try:
             await asyncio.to_thread(self._send, message)
-        except (OSError, SMTPException, TimeoutError) as error:
-            raise EmailDeliveryError("Registration email could not be delivered.") from error
+        except (OSError, SMTPException, TimeoutError, EmailDeliveryError) as error:
+            # Never include exception text here: some SMTP servers include message
+            # contents or authentication details in their response strings.
+            logger.warning("Registration OTP email delivery failed (%s).", type(error).__name__)
+            raise EmailDeliveryError("Registration email could not be delivered.") from None
+        logger.info("Registration OTP email accepted by SMTP server.")
 
     def _send(self, message: EmailMessage) -> None:
-        if self.settings.smtp_use_tls and self.settings.smtp_use_ssl:
-            raise EmailDeliveryError("Configure either SMTP STARTTLS or SSL, not both.")
         smtp_type = SMTP_SSL if self.settings.smtp_use_ssl else SMTP
         client = smtp_type(self.settings.smtp_host, self.settings.smtp_port, timeout=10)
         try:
@@ -58,7 +66,9 @@ class RegistrationMailer:
                 client.ehlo()
             if self.settings.smtp_username and self.settings.smtp_password:
                 client.login(self.settings.smtp_username, self.settings.smtp_password)
-            client.send_message(message)
+            refused = client.send_message(message)
+            if refused:
+                raise SMTPRecipientsRefused(refused)
         finally:
             try:
                 client.quit()

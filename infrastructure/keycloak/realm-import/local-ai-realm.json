@@ -19,7 +19,7 @@
     "host": "mailpit",
     "port": "1025",
     "from": "no-reply@local-ai.local",
-    "fromDisplayName": "Local AI Platform",
+    "fromDisplayName": "Local AI",
     "ssl": "false",
     "starttls": "false",
     "auth": "false"
